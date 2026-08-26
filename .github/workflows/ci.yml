@@ -1,0 +1,25 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is in the matrix on purpose: 0600 token permissions and the config
+        # directory both behave differently there, and a large share of MCP client
+        # users are on Windows.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Run the credential-free suite
+        run: uv run --python ${{ matrix.python-version }} --extra dev pytest -q
+      - name: Lint
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        run: uv run --extra dev ruff check src tests
