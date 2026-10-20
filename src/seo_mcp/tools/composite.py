@@ -11,8 +11,8 @@ from typing import Any
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from .. import cache, config
-from ..auth import scopes, store
+from .. import cache, config, credentials
+from ..auth import scopes
 from ..clients import ga4, gsc
 from ..server import mcp
 from ..shaping import (
@@ -84,7 +84,7 @@ async def gsc_compare_periods(
         raise ToolError(str(exc)) from exc
 
     profile = config.active_profile()
-    creds = store.load(profile, {scopes.GSC_READ})
+    creds = credentials.for_scopes({scopes.GSC_READ})
 
     async def window(start: Any, end: Any) -> QueryResult:
         key = cache.key(
@@ -245,7 +245,7 @@ async def page_report(
         raise ToolError(str(exc)) from exc
 
     path = normalise_url(url)
-    creds = store.load(profile, {scopes.GSC_READ})
+    creds = credentials.for_scopes({scopes.GSC_READ})
     notes: list[str] = list(range_notes)
 
     async def gsc_trend() -> QueryResult:
@@ -280,7 +280,7 @@ async def page_report(
     async def ga4_engagement() -> QueryResult | None:
         if not property_id:
             return None
-        ga_creds = store.load(profile, {scopes.GA4_READ})
+        ga_creds = credentials.for_scopes({scopes.GA4_READ})
         return await ga4.run_report(
             ga_creds,
             property_id,

@@ -143,7 +143,7 @@ async def test_with_no_token_every_tool_returns_an_instruction_not_a_traceback(n
     with pytest.raises(ToolError) as exc:
         await call(name, args)
     message = str(exc.value)
-    assert "seo-mcp auth" in message
+    assert "seo-analytics-mcp auth" in message
     assert "Traceback" not in message
 
 
@@ -151,7 +151,7 @@ async def test_auth_status_still_answers_with_no_token_at_all():
     """The most likely first-run state. It must never fail."""
     payload = await call("auth_status", {})
     text = json.dumps(payload, default=str)
-    assert "seo-mcp auth --client-secret" in text
+    assert "seo-analytics-mcp auth --client-secret" in text
     assert '"authorised"' in text
 
 

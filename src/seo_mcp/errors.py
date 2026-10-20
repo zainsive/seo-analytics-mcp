@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-REAUTH, DOCTOR = "seo-mcp auth --reauth", "seo-mcp doctor"
+REAUTH, DOCTOR = "seo-analytics-mcp auth --reauth", "seo-analytics-mcp doctor"
 
 CONSOLE_APIS = "https://console.cloud.google.com/apis/library"
 
@@ -63,6 +63,9 @@ class Ctx:
     property_id: str | None = None
     scope_needed: str | None = None
     api: str | None = None
+    # Set in service-account deployments. "Re-authorise" is useless advice there -
+    # the fix is granting this email access to the property.
+    service_account_email: str | None = None
 
 
 def _status(exc: Exception) -> int | None:
@@ -129,7 +132,7 @@ def _auth_missing(exc: AuthMissing) -> ToolError:
     return ToolError(
         f"No Google authorisation is stored for profile '{exc.profile}'. This server "
         "cannot open a browser from inside a tool call, so authorise it once from a "
-        "terminal: `seo-mcp auth --client-secret ./client_secret.json`. If you have "
+        "terminal: `seo-analytics-mcp auth --client-secret ./client_secret.json`. If you have "
         f"not created an OAuth client yet, run `{DOCTOR}` - it prints the exact Google "
         "Cloud Console steps in order. Restart this MCP client afterwards."
     )
@@ -156,16 +159,17 @@ def translate(exc: Exception, ctx: Ctx) -> ToolError:
     if isinstance(exc, TokenCorrupt):
         return ToolError(
             f"The stored token at {exc.path} could not be read ({exc.detail}). Delete the "
-            f"profile directory and authorise again: `seo-mcp profiles rm <profile>` then "
-            "`seo-mcp auth --client-secret <path>`."
+            "profile directory and authorise again: "
+            "`seo-analytics-mcp profiles rm <profile>` then "
+            "`seo-analytics-mcp auth --client-secret <path>`."
         )
     if isinstance(exc, ClientSecretMissing):
         return ToolError(
             f"No OAuth client secret found at {exc.path}. Google names that download "
             "'client_secret_<id>.apps.googleusercontent.com.json' - check the path ends "
             "in '.json', since tab-completion often stops at the '.com'. If you have not "
-            "created the client yet, run `seo-mcp doctor` for the Google Cloud Console "
-            "steps, then `seo-mcp auth --client-secret <path>`."
+            "created the client yet, run `seo-analytics-mcp doctor` for the Google Cloud Console "
+            "steps, then `seo-analytics-mcp auth --client-secret <path>`."
         )
     if isinstance(exc, WrongClientType):
         return ToolError(
@@ -220,6 +224,14 @@ def translate(exc: Exception, ctx: Ctx) -> ToolError:
                 f"The stored token lacks the '{ctx.scope_needed}' scope. Re-authorise with "
                 f"`{REAUTH} --enable-writes` to grant it. Read-only scopes are the default "
                 "on purpose."
+            )
+        if ctx.service_account_email:
+            return ToolError(
+                f"The service account {ctx.service_account_email} has no access to {target}. "
+                "Granting access is a separate step from deploying: add that email as a user "
+                "in Search Console under Settings > Users and permissions (Full, if URL "
+                "inspection is needed), and in GA4 under Admin > Property access management "
+                "(Viewer). Access applies within a minute; no redeploy is required."
             )
         return ToolError(
             f"The authorised Google account has no access to {target}. Confirm the account "

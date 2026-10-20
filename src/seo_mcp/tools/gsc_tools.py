@@ -6,8 +6,8 @@ from typing import Any
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from .. import cache, config
-from ..auth import scopes, store
+from .. import cache, config, credentials
+from ..auth import scopes
 from ..clients import gsc
 from ..server import mcp
 from ..shaping import DateRangeError, ShapedResponse, resolve_range, shape
@@ -43,7 +43,7 @@ async def gsc_list_sites() -> ShapedResponse:
     full URLs with a trailing slash.
     """
     profile = config.active_profile()
-    creds = store.load(profile, {scopes.GSC_READ})
+    creds = credentials.for_scopes({scopes.GSC_READ})
     key = cache.key(profile, "gsc.sites.list", {})
     result = await cache.get_or_set(
         profile, key, ttl=cache.TTL_DISCOVERY, producer=lambda: gsc.list_sites(creds)
@@ -84,7 +84,7 @@ async def gsc_search_analytics(
             f"Use any of: {', '.join(gsc.VALID_DIMENSIONS)}."
         )
     profile = config.active_profile()
-    creds = store.load(profile, {scopes.GSC_READ})
+    creds = credentials.for_scopes({scopes.GSC_READ})
     key = cache.key(profile, "gsc.searchanalytics", locals_without())
 
     result = await cache.get_or_set(
@@ -103,7 +103,7 @@ async def gsc_search_analytics(
             data_state=data_state,
         ),
     )
-    out = shape(result, top_n=row_limit, export_dir=profile.export_dir)
+    out = shape(result, top_n=row_limit, export_dir=_base.export_dir(profile))
     out["notes"].extend(range_notes)
     return out
 
@@ -119,7 +119,7 @@ async def gsc_inspect_url(inspection_url: str, site_url: str | None = None) -> d
     """
     site_url = _site(site_url)
     profile = config.active_profile()
-    creds = store.load(profile, {scopes.GSC_READ})
+    creds = credentials.for_scopes({scopes.GSC_READ})
     key = cache.key(profile, "gsc.urlInspection", locals_without())
 
     async def producer():
@@ -143,7 +143,7 @@ async def gsc_list_sitemaps(site_url: str | None = None) -> ShapedResponse:
     """
     site_url = _site(site_url)
     profile = config.active_profile()
-    creds = store.load(profile, {scopes.GSC_READ})
+    creds = credentials.for_scopes({scopes.GSC_READ})
     key = cache.key(profile, "gsc.sitemaps.list", locals_without())
     result = await cache.get_or_set(
         profile,
@@ -182,7 +182,7 @@ async def gsc_submit_sitemap(
                 "have agreed to submit this sitemap to their live property."
             ),
         }
-    creds = store.load(profile, scopes.for_write())
+    creds = credentials.for_scopes(scopes.for_write())
     result = await gsc.submit_sitemap(creds, site_url, feedpath)
     cache.clear(profile)  # the sitemap list just changed
     return {"dry_run": False, **result}

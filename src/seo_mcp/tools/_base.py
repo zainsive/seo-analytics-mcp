@@ -48,16 +48,31 @@ def google_tool(*, api: str, scope: str | None = None) -> Callable[[Callable], C
     def deco(fn: Callable) -> Callable:
         @functools.wraps(fn)
         async def wrapper(*a: Any, **kw: Any) -> Any:
+            site_url = kw.get("site_url")
+            property_id = kw.get("property_id")
+            profile_name, email = "?", None
             try:
-                profile_name = config.active_profile().name
+                profile = config.active_profile()
+                profile_name = profile.name
+                # When the caller omitted the identifier the tool resolved it from a
+                # default, so the error must name that default - not "this resource".
+                site_url = site_url or profile.default_site
+                property_id = property_id or profile.default_property
             except ToolError:  # an invalid SEO_MCP_PROFILE must still report itself
-                profile_name = "?"
+                pass
+            try:
+                from .. import credentials
+
+                email = credentials.service_account_email()
+            except Exception:  # a broken credential is reported by the call itself
+                pass
             ctx = Ctx(
                 profile=profile_name,
                 api=api,
                 scope_needed=scope,
-                site_url=kw.get("site_url"),
-                property_id=kw.get("property_id"),
+                site_url=site_url,
+                property_id=property_id,
+                service_account_email=email,
             )
             try:
                 return await fn(*a, **kw)
@@ -80,6 +95,11 @@ def require(value: str | None, *, what: str, env_var: str, lister: str) -> str:
         f"{env_var} in the server's env block in your MCP client config. Call {lister} "
         "to see what this account can access."
     )
+
+
+def export_dir(profile: Any) -> Any:
+    """Where a spilled CSV goes, or None when this deployment has no reachable disk."""
+    return profile.export_dir if config.exports_enabled() else None
 
 
 def as_rows(mapping: Mapping[str, Any]) -> dict[str, Any]:

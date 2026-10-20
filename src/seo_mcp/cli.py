@@ -12,12 +12,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
-from . import __version__, cache, config
+from . import __version__, cache, config, credentials, env
 from .auth import scopes, store
 from .clients import ga4, gsc, indexnow
 from .errors import Ctx, translate
@@ -48,7 +49,7 @@ yours ever reaches anyone else. Six clicks, once:
     https://console.cloud.google.com/auth/clients
 
  5. Download the client JSON, then run:
-    seo-mcp auth --client-secret /path/to/client_secret.json
+    seo-analytics-mcp auth --client-secret /path/to/client_secret.json
 
 You will see a "Google hasn't verified this app" screen once. That is expected
 for your own client: choose Advanced, then continue.
@@ -106,7 +107,9 @@ def cmd_auth(args: argparse.Namespace) -> int:
             "\nWARNING: Google returned no refresh token, so this will stop working in "
             "about an hour. Re-run with --reauth to force a fresh consent."
         )
-    _out("\nNext: run `seo-mcp doctor` to confirm, then add the server to your MCP client.")
+    _out(
+        "\nNext: run `seo-analytics-mcp doctor` to confirm, then add the server to your MCP client."
+    )
     return 0
 
 
@@ -126,7 +129,7 @@ async def _doctor(profile: config.Profile) -> list[dict[str, Any]]:
             _check(
                 "client secret",
                 False,
-                "not installed yet - run `seo-mcp auth --client-secret "
+                "not installed yet - run `seo-analytics-mcp auth --client-secret "
                 "~/Downloads/client_secret_*.json`, which copies it to "
                 f"{profile.client_path} and then authorises",
             )
@@ -153,7 +156,7 @@ async def _doctor(profile: config.Profile) -> list[dict[str, Any]]:
     # 3. token present
     held = store.scopes_held(profile)
     if not store.has_token(profile):
-        checks.append(_check("token", False, "no token stored - run `seo-mcp auth`"))
+        checks.append(_check("token", False, "no token stored - run `seo-analytics-mcp auth`"))
         for name in ("token refreshable", "scopes", "token age"):
             checks.append(_check(name, None, "skipped - no token"))
         creds = None
@@ -254,7 +257,7 @@ async def _doctor(profile: config.Profile) -> list[dict[str, Any]]:
         _check(
             "environment",
             True,
-            f"seo-mcp {__version__}, python {sys.version.split()[0]}, "
+            f"seo-analytics-mcp {__version__}, python {sys.version.split()[0]}, "
             f"profile dir {profile.root}, cache {cache.size_bytes(profile) // 1024} KiB",
         )
     )
@@ -281,7 +284,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             )
         )
     else:
-        _out(f"seo-mcp {__version__} - profile '{profile.name}'\n")
+        _out(f"seo-analytics-mcp {__version__} - profile '{profile.name}'\n")
         for c in checks:
             mark = {True: "PASS", False: "FAIL", None: "----"}[c["ok"]]
             _out(f"  [{mark}] {c['check']:<20} {c['detail']}")
@@ -310,7 +313,7 @@ def cmd_profiles(args: argparse.Namespace) -> int:
         return 0
 
     if not args.name:
-        _out(f"error: `seo-mcp profiles {args.action}` needs a profile name")
+        _out(f"error: `seo-analytics-mcp profiles {args.action}` needs a profile name")
         return 2
     profile = config.profile_named(args.name)
 
@@ -339,12 +342,32 @@ def cmd_profiles(args: argparse.Namespace) -> int:
             _out("Re-run with --yes to confirm.")
             return 2
         shutil.rmtree(profile.root)
-        _out(f"Removed {profile.root}. Run `seo-mcp auth` to start over.")
+        _out(f"Removed {profile.root}. Run `seo-analytics-mcp auth` to start over.")
         return 0
     return 2
 
 
 # --- serve -------------------------------------------------------------------
+
+
+def cmd_serve_http(args: argparse.Namespace) -> int:
+    """The hosted deployment: one credential, many connecting AI tools."""
+    from .server import endpoint_path, serve_http
+
+    identity = credentials.describe()
+    _out(f"credential mode : {identity['mode']}")
+    if identity["mode"] == "service_account":
+        _out(f"service account : {identity['service_account_email']}")
+    else:
+        _out(
+            "WARNING: serving with a USER OAuth token. It will stop working when the "
+            "grant is revoked or the password changes, and only a browser flow can "
+            "restore it. Prefer a service account for anything your team depends on - "
+            f"set {credentials.SERVICE_ACCOUNT_JSON}."
+        )
+    _out(f"endpoint        : http://{args.host}:{args.port}{endpoint_path()}")
+    serve_http(host=args.host, port=args.port)
+    return 0
 
 
 def cmd_serve(_args: argparse.Namespace) -> int:
@@ -362,7 +385,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="MCP server for Google Search Console, GA4 and IndexNow. "
         "With no arguments it starts the stdio server.",
     )
-    parser.add_argument("--version", action="version", version=f"seo-mcp {__version__}")
+    parser.add_argument("--version", action="version", version=f"seo-analytics-mcp {__version__}")
     subs = parser.add_subparsers(dest="command")
 
     p_auth = subs.add_parser("auth", help="authorise a Google account (opens a browser once)")
@@ -392,11 +415,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_serve = subs.add_parser("serve", help="start the stdio server (the default)")
     p_serve.set_defaults(func=cmd_serve)
+
+    p_http = subs.add_parser(
+        "serve-http", help="start the hosted HTTP server (one credential, many clients)"
+    )
+    p_http.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+    p_http.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
+    p_http.set_defaults(func=cmd_serve_http)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    env.load()  # real environment always wins; a missing .env is not an error
     parser = build_parser()
     # No arguments at all means serve - that is how the MCP client invokes us. An
     # unrecognised argument must NOT fall through to serve, or a typo starts a server

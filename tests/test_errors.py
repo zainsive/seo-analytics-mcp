@@ -94,7 +94,7 @@ def test_ga4_grpc_exceptions_translate_by_their_code_attribute(exc, expected):
 
 def test_missing_token_tells_the_user_the_exact_command():
     message = str(translate(AuthMissing("default"), Ctx()))
-    assert "seo-mcp auth --client-secret" in message
+    assert "seo-analytics-mcp auth --client-secret" in message
     assert "cannot open a browser from inside a tool call" in message
 
 
@@ -127,7 +127,7 @@ def test_an_already_actionable_toolerror_is_never_rewrapped():
 
 def test_an_unrecognised_exception_still_asks_for_doctor_output():
     message = str(translate(RuntimeError("something odd"), CTX))
-    assert "seo-mcp doctor" in message and "something odd" in message
+    assert "seo-analytics-mcp doctor" in message and "something odd" in message
 
 
 def test_no_message_leaks_a_traceback():

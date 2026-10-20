@@ -85,6 +85,16 @@ class Profile:
         return self.default("indexnow_host", "INDEXNOW_HOST")
 
 
+def exports_enabled() -> bool:
+    """Whether a large result may spill to a CSV on disk.
+
+    On a local install the file is for the human to open. In the hosted deployment it
+    is a path inside an ephemeral container that nobody can reach, so the response
+    must stand on its own summary instead of pointing at a file that is not there.
+    """
+    return os.environ.get("SEO_MCP_EXPORTS", "1").strip().lower() not in ("0", "false", "no")
+
+
 def profile_named(name: str) -> Profile:
     if not PROFILE_RE.fullmatch(name):
         raise ToolError(

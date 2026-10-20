@@ -6,8 +6,8 @@ from typing import Any
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from .. import cache, config
-from ..auth import scopes, store
+from .. import cache, config, credentials
+from ..auth import scopes
 from ..clients import ga4
 from ..server import mcp
 from ..shaping import DateRangeError, ShapedResponse, normalise_url, resolve_range, shape
@@ -50,7 +50,7 @@ async def ga4_list_properties() -> ShapedResponse:
     Analytics properties are not returned - they no longer exist in this API.
     """
     profile = config.active_profile()
-    creds = store.load(profile, {scopes.GA4_READ})
+    creds = credentials.for_scopes({scopes.GA4_READ})
     key = cache.key(profile, "ga4.accountSummaries", {})
     result = await cache.get_or_set(
         profile, key, ttl=cache.TTL_DISCOVERY, producer=lambda: ga4.list_properties(creds)
@@ -90,7 +90,7 @@ async def ga4_run_report(
             "GA4 cannot return a report of dimensions alone."
         )
     profile = config.active_profile()
-    creds = store.load(profile, {scopes.GA4_READ})
+    creds = credentials.for_scopes({scopes.GA4_READ})
     key = cache.key(profile, "ga4.runReport", locals_without())
     result = await cache.get_or_set(
         profile,
@@ -108,7 +108,7 @@ async def ga4_run_report(
             order_by=order_by,
         ),
     )
-    return shape(result, top_n=limit, export_dir=profile.export_dir)
+    return shape(result, top_n=limit, export_dir=_base.export_dir(profile))
 
 
 @mcp.tool(annotations=_base.READ_ONLY)
@@ -128,7 +128,7 @@ async def ga4_landing_pages(
     property_id = _property(property_id)
     start_date, end_date, _ = _range(start_date, end_date)
     profile = config.active_profile()
-    creds = store.load(profile, {scopes.GA4_READ})
+    creds = credentials.for_scopes({scopes.GA4_READ})
     key = cache.key(profile, "ga4.landingPages", locals_without())
 
     dimension_filter = None
@@ -167,4 +167,4 @@ async def ga4_landing_pages(
     from ..shaping import QueryResult  # local import keeps the producer closure tidy
 
     result = await cache.get_or_set(profile, key, ttl=cache.TTL_GA4, producer=producer)
-    return shape(result, top_n=top_n, sort_by="sessions", export_dir=profile.export_dir)
+    return shape(result, top_n=top_n, sort_by="sessions", export_dir=_base.export_dir(profile))
