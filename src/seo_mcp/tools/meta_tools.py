@@ -88,7 +88,24 @@ async def auth_status() -> dict[str, Any]:
     out["apis"] = await asyncio.gather(*probes)
 
     broken = [p["api"] for p in out["apis"] if not p["answers"]]
-    if not broken:
+    # An API that answers but exposes nothing is the normal failure for a service
+    # account, and it is the whole reason to call this tool. Reporting "no action
+    # required" here sends the operator to debug the wrong layer entirely.
+    empty = [p["api"] for p in out["apis"] if p["answers"] and not p.get("visible")]
+    if not broken and empty:
+        who = identity.get("service_account_email") or "the authorised account"
+        out["next_step"] = (
+            f"Authentication works and the APIs answer, but {who} can see no properties "
+            f"on {', '.join(empty)}. Access is granted per property and is a separate "
+            "step: add that identity in Search Console under Settings > Users and "
+            "permissions (Full, if URL inspection is needed), and in GA4 under Admin > "
+            "Property access management (Viewer). It applies within a minute, with no "
+            "restart or redeploy."
+        )
+        out["notes"].append(
+            "Nothing will return data until that grant exists - every query answers 403."
+        )
+    elif not broken:
         out["next_step"] = "Everything needed is working. No action required."
     elif identity["mode"] == "service_account":
         email = identity.get("service_account_email")

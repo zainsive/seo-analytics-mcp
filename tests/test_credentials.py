@@ -297,3 +297,32 @@ def test_an_unreadable_env_file_does_not_crash_the_server(tmp_path, monkeypatch,
         assert "not reading" in caplog.text
     finally:
         f.chmod(0o600)
+
+
+async def test_auth_status_does_not_claim_success_when_it_can_see_no_properties(
+    monkeypatch, key_info
+):
+    """An API that answers while exposing nothing is the normal service-account
+    failure. Calling that "no action required" sends the operator to the wrong layer."""
+    import json as _json
+
+    from seo_mcp.clients import ga4, gsc
+    from seo_mcp.server import mcp as server_mcp
+    from seo_mcp.shaping import QueryResult
+
+    monkeypatch.setenv(credentials.SERVICE_ACCOUNT_JSON, _json.dumps(key_info))
+
+    async def empty_gsc(*a, **kw):
+        return QueryResult(rows=[], dimension_keys=(), metric_keys=(), source="gsc", total_rows=0)
+
+    async def empty_ga4(*a, **kw):
+        return QueryResult(rows=[], dimension_keys=(), metric_keys=(), source="ga4", total_rows=0)
+
+    monkeypatch.setattr(gsc, "list_sites", empty_gsc)
+    monkeypatch.setattr(ga4, "list_properties", empty_ga4)
+
+    payload = (await server_mcp.call_tool("auth_status", {})).structured_content
+    assert "no action required" not in payload["next_step"].lower()
+    assert key_info["client_email"] in payload["next_step"]
+    assert "Users and permissions" in payload["next_step"]
+    assert any("403" in n for n in payload["notes"])
