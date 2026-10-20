@@ -258,3 +258,24 @@ def test_the_public_hostname_can_be_allowed_for_a_reverse_proxy(monkeypatch):
     assert security.allowed_hosts == ["mcp.example.com", "mcp2.example.com"]
     assert "https://mcp.example.com" in security.allowed_origins
     assert security.enable_dns_rebinding_protection is True  # still on, just scoped
+
+
+def test_the_reported_version_matches_the_installed_distribution():
+    """A mismatch here silently reports 0.0.0.dev0 in doctor output and issue reports."""
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as dist_version
+    from pathlib import Path
+
+    import tomllib
+
+    pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    name = pyproject["project"]["name"]
+    try:
+        installed = dist_version(name)
+    except PackageNotFoundError:
+        import pytest as _pytest
+
+        _pytest.skip("package not installed in this environment")
+    from seo_mcp import __version__
+
+    assert __version__ == installed
