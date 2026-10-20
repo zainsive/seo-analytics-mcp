@@ -33,6 +33,8 @@ def _warn_if_world_readable(path: Path) -> None:
         mode = path.stat().st_mode
     except OSError:  # pragma: no cover
         return
+    if not mode & stat.S_IRUSR:
+        return  # cannot be read by anyone but root; nothing to warn about
     if mode & (stat.S_IRGRP | stat.S_IROTH):
         logger.warning(
             "%s is readable by other users (mode %s). It holds credentials - run: chmod 600 %s",
@@ -45,15 +47,27 @@ def _warn_if_world_readable(path: Path) -> None:
 def load(explicit: str | None = None) -> Path | None:
     """Apply the first .env found. Returns the file used, or None.
 
-    Missing file is not an error: the hosted deployment injects real environment
-    variables instead, and the local stdio install needs neither.
+    Neither a missing nor an unreadable file is an error. The recommended hardened
+    deployment keeps .env root-owned 0600 and lets systemd inject it via
+    EnvironmentFile before dropping privileges - so the service user cannot read it,
+    does not need to, and must not crash trying.
     """
     for path in candidates(explicit):
         if not path.is_file():
             continue
         _warn_if_world_readable(path)
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.info(
+                "not reading %s (%s). This is expected when the supervisor injects the "
+                "environment itself; values already set are used as-is.",
+                path,
+                exc.strerror or exc,
+            )
+            return None
         applied = 0
-        for raw in path.read_text(encoding="utf-8").splitlines():
+        for raw in content.splitlines():
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue

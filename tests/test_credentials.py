@@ -279,3 +279,21 @@ def test_the_reported_version_matches_the_installed_distribution():
     from seo_mcp import __version__
 
     assert __version__ == installed
+
+
+def test_an_unreadable_env_file_does_not_crash_the_server(tmp_path, monkeypatch, caplog):
+    """The hardened deployment keeps .env root-owned 0600 and lets systemd inject it.
+    The service user cannot read it, does not need to, and must not die trying."""
+    import os
+
+    f = tmp_path / ".env"
+    f.write_text("SHOULD_NOT_BE_READ=1\n")
+    f.chmod(0o000)
+    monkeypatch.delenv("SHOULD_NOT_BE_READ", raising=False)
+    try:
+        with caplog.at_level("INFO"):
+            assert env.load(str(f)) is None
+        assert "SHOULD_NOT_BE_READ" not in os.environ
+        assert "not reading" in caplog.text
+    finally:
+        f.chmod(0o600)
