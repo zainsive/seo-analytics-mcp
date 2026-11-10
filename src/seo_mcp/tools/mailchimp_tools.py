@@ -42,6 +42,27 @@ def _site_host() -> str | None:
     return (profile.indexnow_host or "").removeprefix("www.") or None
 
 
+def _automation_note(report: dict[str, Any], links: list[dict[str, Any]]) -> list[str]:
+    """Flag a campaign whose clicks cannot all be human.
+
+    Nobody clicks a link they never opened, so link clicks running well past unique
+    opens means something other than recipients is doing the clicking - corporate mail
+    scanners and link prefetchers fetch every URL in a message. Left unflagged, the
+    per-link rows read as three times the real audience.
+    """
+    clicks = sum(int(r.get("clicks") or 0) for r in links)
+    opens, people = int(report.get("unique_opens") or 0), int(report.get("unique_clicks") or 0)
+    if not (opens and clicks > 1.5 * opens):
+        return []
+    return [
+        f"This campaign records {clicks:,} link clicks against only {opens:,} unique "
+        f"opens. Clicks exceeding opens is the signature of security scanners and link "
+        f"prefetchers following every link, so the per-link counts are inflated - "
+        f"most heavily on footer and social links. {people:,} distinct subscribers "
+        f"clicked something, and that is the figure to quote."
+    ]
+
+
 def _day(value: str | None) -> str | None:
     if not value:
         return None
@@ -134,6 +155,7 @@ async def mailchimp_campaign_report(campaign_id: str) -> dict[str, Any]:
         "links_clicked": links[:25],
         "links_total": len(links),
         "notes": list(result.meta.get("link_notes") or [])
+        + _automation_note(report, links)
         + [
             "Opens are measured by a tracking pixel, so recipients who block images are "
             "not counted. Treat the open rate as a floor, not a precise figure.",

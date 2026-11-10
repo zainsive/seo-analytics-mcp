@@ -1,6 +1,7 @@
 """Mailchimp client and tools. No network: every HTTP call is intercepted."""
 
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -9,6 +10,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from seo_mcp.clients import mailchimp
 from seo_mcp.server import mcp
 from seo_mcp.shaping import QueryResult, shape
+from seo_mcp.tools import mailchimp_tools as mt
 
 # Deliberately NOT shaped like a real key. A fixture of 32 hex characters plus a
 # data-centre suffix is indistinguishable from a live credential, and GitHub's secret
@@ -398,3 +400,52 @@ async def test_one_url_placed_twice_is_summed_not_shown_twice_nor_dropped(stub):
     # And the count must not claim rows are missing upstream.
     assert result.total_rows == 2
     assert any("tracked separately" in n for n in result.notes)
+
+
+def test_clicks_far_exceeding_opens_are_flagged_as_automated():
+    """Real numbers from a live send: 3,422 recipients, 886 unique opens, 1,539 link
+    clicks and 466 distinct subscribers clicking. Nobody clicks a link they never
+    opened, so the gap is scanners - and the per-link rows read as 3x the real
+    audience unless that is said out loud."""
+    report = {"unique_opens": 886, "unique_clicks": 466}
+    links = [{"clicks": 473}, {"clicks": 467}, {"clicks": 445}, {"clicks": 154}]
+    note = mt._automation_note(report, links)
+    assert len(note) == 1
+    assert "1,539 link clicks" in note[0] and "886 unique" in note[0]
+    assert "466 distinct subscribers" in note[0]
+
+
+def test_a_plausible_campaign_is_not_flagged():
+    assert mt._automation_note({"unique_opens": 900, "unique_clicks": 120}, [{"clicks": 140}]) == []
+
+
+def test_a_campaign_with_no_opens_is_not_flagged_by_division():
+    assert mt._automation_note({"unique_opens": 0, "unique_clicks": 0}, [{"clicks": 5}]) == []
+
+
+@pytest.mark.parametrize(
+    "site,expected",
+    [
+        ("sc-domain:stgconsulting.com", "stgconsulting.com"),
+        ("sc-domain:www.stgconsulting.com", "stgconsulting.com"),
+        ("https://www.example.com/", "example.com"),
+        ("https://example.com", "example.com"),
+        (None, None),
+    ],
+)
+def test_the_site_host_is_derived_from_whatever_form_the_site_is_configured_in(
+    monkeypatch, site, expected
+):
+    monkeypatch.setattr(
+        mt.config, "active_profile", lambda: SimpleNamespace(default_site=site, indexnow_host=None)
+    )
+    assert mt._site_host() == expected
+
+
+def test_the_indexnow_host_is_the_fallback_when_no_search_console_site_is_set(monkeypatch):
+    monkeypatch.setattr(
+        mt.config,
+        "active_profile",
+        lambda: SimpleNamespace(default_site=None, indexnow_host="www.example.com"),
+    )
+    assert mt._site_host() == "example.com"

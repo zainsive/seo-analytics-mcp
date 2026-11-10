@@ -338,9 +338,18 @@ async def campaign_links(
             "'unique_clicks' can therefore exceed the number of distinct people, since "
             "someone who clicked two placements of one link counts in each."
         )
-    notes.append(
-        "Click counts exclude recipients whose mail client blocked tracking, so "
-        "they undercount slightly."
+    notes.extend(
+        [
+            # Both directions are real, and the overcount is the larger error by far:
+            # scanners click every link, which is why footer and social links collect
+            # implausible totals. Compare with the campaign report's 'unique_clicks'.
+            "'unique_clicks' here counts one per link per subscriber, so these rows sum "
+            "to far more than the number of people who clicked. Security scanners and "
+            "link prefetchers also open and click every link in a message. For distinct "
+            "people, use 'unique_clicks' from mailchimp_campaign_report instead.",
+            "Click counts also miss recipients whose mail client blocked tracking "
+            "entirely, so an individual link can undercount too.",
+        ]
     )
     return QueryResult(
         rows=rows,
