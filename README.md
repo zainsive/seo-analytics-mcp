@@ -177,8 +177,8 @@ common issue filed against it.
 
 ## Tools
 
-Thirteen tools: ten map to upstream operations, two join sources, and one exists purely so the
-model can tell a confused user what to do.
+Seventeen tools: fourteen map to upstream operations, two join sources, and one exists purely
+so the model can tell a confused user what to do.
 
 | | Tool | What it does |
 |:--|:--|:--|
@@ -193,6 +193,10 @@ model can tell a confused user what to do.
 | 📊 | `ga4_landing_pages` | Sessions, engagement, conversions by landing page |
 | ⚡ | `indexnow_verify_key` | Checks the key file is published correctly |
 | ⚡ | `indexnow_submit` | Batch submit — dry run by default, token-gated confirm |
+| 📧 | `mailchimp_list_audiences` | Lists on the account, member counts, lifetime rates |
+| 📧 | `mailchimp_list_campaigns` | Sent campaigns newest first, with delivery and engagement |
+| 📧 | `mailchimp_campaign_report` | One campaign in full, plus the links its recipients clicked |
+| 📧 | `mailchimp_campaign_links` | Which links were clicked, most-clicked first |
 | 🔗 | `page_report` | One URL: GSC trend, top queries, GA4 engagement, index status |
 | 🩺 | `auth_status` | Active profile, scopes, which APIs answer, what to run next |
 
@@ -257,7 +261,47 @@ Every variable is optional. Precedence: **tool argument → environment → prof
 | `SEO_MCP_PROFILE` | Which profile to use (default: `default`) |
 | `SEO_MCP_HOME` | Override the profile root directory |
 | `INDEXNOW_HOST` · `INDEXNOW_KEY` | Required only for IndexNow |
+| `MAILCHIMP_API_KEY` | Required only for the Mailchimp tools. The suffix (`-us15`) selects the data centre |
 | `SEO_MCP_LOG_LEVEL` | `DEBUG` for verbose logging — always on **stderr**, never stdout |
+
+Hosted deployment only:
+
+| Variable | Purpose |
+|:--|:--|
+| `SEO_MCP_ENDPOINT_PATH` | The endpoint path. Make it long and random |
+| `SEO_MCP_ALLOWED_HOSTS` | Public hostname(s). Without it, every proxied request fails with `421 Invalid Host header` |
+| `SEO_MCP_TOKEN_DB` | Where access tokens live (default: profile root). Must be on a writable path — under `systemd` with `ProtectSystem=strict`, that means a `ReadWritePaths=` directory |
+| `SEO_MCP_TOKENS` | Fallback only: `label:token` pairs in plaintext. Prefer `token mint` |
+
+### Access tokens
+
+The hosted server refuses to start unless at least one token exists — serving openly
+is never the fallback. Issue one per person:
+
+```bash
+seo-analytics-mcp token mint alice            # prints the token once; only its hash is stored
+seo-analytics-mcp token mint dev --days 30    # optional expiry
+seo-analytics-mcp token list                  # who has access, and when they last used it
+seo-analytics-mcp token revoke alice          # effective on the next request, no restart
+```
+
+Clients send it as `Authorization: Bearer <token>`.
+
+Only the SHA-256 of each token is stored, so the database can be copied off the host
+and still grants nobody access. Revocation is immediate because the gate queries per
+request rather than holding a snapshot, and a revoked token cannot be resurrected by
+the same string lingering in `SEO_MCP_TOKENS`.
+
+> The CLI reads `.env` from the working directory, but a hardened deployment keeps that
+> file root-owned and `0600`. When running `token` commands as the service account, pass
+> the path explicitly — otherwise the token lands in a database the server never reads:
+>
+> ```bash
+> sudo -u seomcp SEO_MCP_TOKEN_DB=/opt/seo-analytics-mcp/state/tokens.db \
+>   /opt/seo-analytics-mcp/.venv/bin/seo-analytics-mcp token mint alice
+> ```
+>
+> Every command prints the database it used, so a mismatch is visible immediately.
 
 ### Dates
 

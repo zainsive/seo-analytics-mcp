@@ -530,3 +530,44 @@ async def test_a_page_that_did_not_move_is_in_neither_list(monkeypatch):
     assert payload["gained"] == [] and payload["declined"] == []
     assert payload["summary"]["rows_compared"] == 1
     assert payload["summary"]["rows_that_moved"] == 0
+
+
+# --- the README must not drift from the server --------------------------------
+
+
+async def test_the_readme_lists_exactly_the_tools_that_exist():
+    """It silently claimed thirteen while seventeen were registered. Anyone sizing up
+    the project reads that table first, so it is part of the interface."""
+    import re
+    from pathlib import Path
+
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+    documented = set(re.findall(r"^\| [^|]*\| `([a-z0-9_]+)` \|", readme, re.MULTILINE))
+    registered = {t.name for t in await mcp.list_tools()}
+    assert documented == registered, (
+        f"only in README: {sorted(documented - registered)}; "
+        f"only in server: {sorted(registered - documented)}"
+    )
+
+
+async def test_the_readme_tool_count_matches_the_table():
+    import re
+    from pathlib import Path
+
+    words = {
+        "Ten": 10,
+        "Eleven": 11,
+        "Twelve": 12,
+        "Thirteen": 13,
+        "Fourteen": 14,
+        "Fifteen": 15,
+        "Sixteen": 16,
+        "Seventeen": 17,
+        "Eighteen": 18,
+        "Nineteen": 19,
+        "Twenty": 20,
+    }
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+    match = re.search(r"^(\w+) tools:", readme, re.MULTILINE)
+    assert match, "the Tools section no longer states a count"
+    assert words[match.group(1)] == len(await mcp.list_tools())
