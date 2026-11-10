@@ -109,6 +109,21 @@ footer{margin-top:62px; padding-top:22px; border-top:1px solid var(--hair);
   font-family:var(--sans); font-size:14.5px; color:var(--ink-3); line-height:1.65}
 footer a{color:var(--ink-3)}
 
+/* inline code: sharp-cornered, like everything else here */
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.82em;
+  background:var(--quiet); border:1px solid var(--hair); padding:1px 6px}
+
+/* the key sits inside the same framed box as the link, divided from it */
+.link .lbl-key{margin:24px 0 10px; padding-top:22px; border-top:1px solid var(--hair-2)}
+.link .keynote{font-family:var(--sans); font-size:14.5px; line-height:1.6;
+  color:var(--ink-2); margin:0}
+
+/* what to type, as a labelled pair rather than a sentence to decode */
+dl.pair{display:grid; grid-template-columns:auto 1fr; gap:10px 18px; align-items:baseline;
+  margin:14px 0 12px; font-family:var(--sans); font-size:15px}
+dl.pair dt{font-size:12.5px; font-weight:600; color:var(--ink-3); padding-top:2px}
+dl.pair dd{margin:0; color:var(--ink)}
+
 @media (max-width:620px){
   body{font-size:17.5px}
   header{padding:42px 0 0}
@@ -145,21 +160,21 @@ footer a{color:var(--ink-3)}
       <code class="url" id="url">https://mcp.stgconsulting.com/mcp/__ENDPOINT_PATH__</code>
       <button id="copy" type="button">Copy</button>
     </div>
-    <p class="after" id="after">Treat this like a password. Please keep it out of shared documents,
-    tickets, public channels and screenshots. If it does get out, it can be replaced in a minute.</p>
-  </div>
+    <p class="lbl lbl-key">Your key</p>
+    <p class="keynote">Sent to you separately. It is not printed here because everyone has their
+    own — which is what lets one person's access be switched off without disturbing anybody
+    else.</p>
 
-  <div class="link">
-    <p class="lbl">Your key</p>
-    <p class="after">You also need a personal key, which was sent to you separately. It is not
-    printed here, because everyone has their own — that way one person's key can be withdrawn
-    without disturbing anybody else. Keep it with the same care as the link.</p>
+    <p class="after" id="after">Both work like passwords. Please keep them out of shared
+    documents, tickets, public channels and screenshots. If either gets out, it can be replaced
+    in a minute.</p>
   </div>
 </header>
 
 <section id="setup">
   <h2>Setting it up</h2>
-  <p>About a minute, and only once for each app you use.</p>
+  <p>About a minute, and only once for each app you use. You need both things from the
+  top of this page: the link, and your key.</p>
 
   <h3>In Claude</h3>
   <ol class="steps">
@@ -174,12 +189,13 @@ footer a{color:var(--ink-3)}
       <p class="aside">Use the Copy button so you do not lose a character.</p>
     </li>
     <li>
-      <p>Open <strong>Request headers</strong> and add one. Name it
-      <code>authorization</code>. For the value, type the word <strong>Bearer</strong>, then a
-      space, then your personal key.</p>
-      <p class="aside">So the value reads <code>Bearer</code> followed by your key. The word and
-      the space both matter — without them the key is not recognised. If you do not see a Request
-      headers section, choose <strong>No sign in</strong> first and it will appear.</p>
+      <p>Find <strong>Request headers</strong> and add one:</p>
+      <dl class="pair">
+        <dt>Name</dt><dd><code>authorization</code></dd>
+        <dt>Value</dt><dd><code>Bearer</code> then a space, then your key</dd>
+      </dl>
+      <p class="aside">The word and the space are both part of it. If there is no Request headers
+      section, choose <strong>No sign in</strong> and it will appear.</p>
     </li>
     <li>
       <p>Save, then ask your first question.</p>
@@ -308,7 +324,7 @@ footer a{color:var(--ink-3)}
   <table>
     <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
     <tbody>
-      <tr><td>It says the server refused the request, or mentions 401</td><td>The key is missing or mistyped. Check the value begins with <code>Bearer</code> and a space, and that the whole key followed</td></tr>
+      <tr><td>It is refused, or mentions 401</td><td>The key is missing or mistyped. Check the value starts with <code>Bearer</code> and a space, and that the whole key follows</td></tr>
       <tr><td>It says it has no access to our website</td><td>Pass it on — a permission needs renewing</td></tr>
       <tr><td>The connector does not appear</td><td>Check the whole link was pasted, including the long code at the end, then restart the app</td></tr>
       <tr><td>It reports the connector as offline</td><td>Use an ordinary chat rather than a Cowork or Code session</td></tr>

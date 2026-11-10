@@ -114,6 +114,7 @@ footer{margin-top:58px; padding-top:22px; border-top:1px solid var(--hair);
     <li>A service account rather than a personal token. The earlier personal OAuth token died after 55 days with <code>invalid_grant</code>, and only one person could have restored it.</li>
     <li>uv-managed Python 3.13. The box ships 3.14, which has no <code>grpcio</code> wheels, so GA4 would have needed a source build.</li>
     <li>Read-only by policy: in service-account mode the sitemap-submitting tool is unregistered rather than merely blocked.</li>
+    <li>Access tokens in SQLite, stored as SHA-256 only. The file can be copied off the box and grants nobody access, and revoking takes effect on the next request rather than needing a restart that disconnects everyone.</li>
   </ul>
 </section>
 
@@ -131,14 +132,29 @@ sudo -u seomcp /usr/local/bin/uv pip install --python .venv/bin/python \
   --reinstall-package seo-analytics-mcp \
   "seo-analytics-mcp[http] @ git+https://github.com/zainsive/seo-analytics-mcp.git@main"
 sudo systemctl restart seo-analytics-mcp</code></pre>
+  <h3>Issue and withdraw access</h3>
+  <p>One token per person. Minting prints it once — only its hash is kept, so a lost token is
+  replaced rather than recovered. No restart is needed for any of these.</p>
+  <pre><code>cd /tmp     <span class="c"># the CLI cannot read the root-owned .env from elsewhere</span>
+sudo -u seomcp SEO_MCP_TOKEN_DB=/opt/seo-analytics-mcp/state/tokens.db \
+  /opt/seo-analytics-mcp/.venv/bin/seo-analytics-mcp token mint alice
+<span class="c"># ... token list      who has access, and when they last used it</span>
+<span class="c"># ... token revoke alice   effective on their next request</span></code></pre>
+  <p>Pass <code>SEO_MCP_TOKEN_DB</code> explicitly as above. Run without it, the command writes to
+  a different database and the server never sees the token — every command prints the file it
+  used, so check that line. Add <code>--days N</code> to expire a token automatically.</p>
+
   <h3>Rotate the link</h3>
-  <p>Do this when someone leaves, or if the link reaches somewhere public. There is no per-person
-  access, so rotating replaces it for everyone.</p>
+  <p>The path is shared, so rotating it replaces the link for everyone. For one person leaving,
+  revoke their token instead — rotate only if the link itself reaches somewhere public.</p>
   <pre><code>python3 -c "import secrets; print('/mcp/' + secrets.token_hex(16))"
 sudo nano /opt/seo-analytics-mcp/.env     <span class="c"># update SEO_MCP_ENDPOINT_PATH</span>
 sudo systemctl restart seo-analytics-mcp</code></pre>
   <h3>Update these pages</h3>
-  <pre><code>scp docs/index.html stg-vps:/tmp/d.html
+  <p>The committed copy carries <code>__ENDPOINT_PATH__</code> in place of the real path, because
+  the repository is public and that path is access control. Substitute it on the way out.</p>
+  <pre><code>sed "s|__ENDPOINT_PATH__|$PATH_SEGMENT|g" docs/index.html &gt; /tmp/d.html
+scp /tmp/d.html stg-vps:/tmp/d.html
 ssh stg-vps 'sudo install -m 644 /tmp/d.html /var/www/mcp-docs/index.html'</code></pre>
 </section>
 
@@ -152,9 +168,10 @@ ssh stg-vps 'sudo install -m 644 /tmp/d.html /var/www/mcp-docs/index.html'</code
       <tr><td class="k">SEO_MCP_SERVICE_ACCOUNT_JSON</td><td>The Google credential, base64-encoded. Base64 because a private key's newlines defeat most <code>.env</code> parsers</td></tr>
       <tr><td class="k">SEO_MCP_ENDPOINT_PATH</td><td>The secret path — the access control</td></tr>
       <tr><td class="k">SEO_MCP_ALLOWED_HOSTS</td><td>Public hostname. Without it every proxied request returns 421</td></tr>
-      <tr><td class="k">SEO_MCP_TOKENS</td><td>Per-person bearer tokens, <code>label:token</code> comma-separated. Built but not yet enabled</td></tr>
+      <tr><td class="k">SEO_MCP_TOKEN_DB</td><td>Where per-person tokens live (<code>/opt/seo-analytics-mcp/state/tokens.db</code>). Must sit under a <code>ReadWritePaths=</code> directory, since the unit sets <code>ProtectSystem=strict</code></td></tr>
+      <tr><td class="k">SEO_MCP_TOKENS</td><td>Fallback only: <code>label:token</code> pairs in plaintext, needing a restart to change. Prefer <code>token mint</code></td></tr>
       <tr><td class="k">GSC_DEFAULT_SITE</td><td>So nobody has to name the property</td></tr>
-      <tr><td class="k">GA4_DEFAULT_PROPERTY</td><td>Same for GA4. Not set yet</td></tr>
+      <tr><td class="k">GA4_DEFAULT_PROPERTY</td><td>Same for GA4</td></tr>
       <tr><td class="k">SEO_MCP_EXPORTS</td><td><code>0</code> — no CSVs on a server nobody can browse</td></tr>
       <tr><td class="k">SEO_MCP_HOME</td><td>Cache and state directory</td></tr>
       <tr><td class="k">SEO_MCP_LOG_LEVEL</td><td><code>WARNING</code>; use <code>INFO</code> while debugging</td></tr>
@@ -206,18 +223,15 @@ ssh stg-vps 'sudo install -m 644 /tmp/d.html /var/www/mcp-docs/index.html'</code
     connector and surfaced only because deploying it ran the test.</p>
   </div>
   <div class="flag">
-    <p><strong>GA4 default not set.</strong> <code>GA4_DEFAULT_PROPERTY</code> is empty, so GA4
-    questions need a property ID until it is filled in. <code>ga4_list_properties</code> returns it.</p>
-  </div>
-  <div class="flag">
-    <p><strong>Access is one shared link.</strong> No per-person revocation, and no record of who
-    asked what. Per-person bearer tokens are built and tested but not enabled, pending confirmation
-    that claude.ai connectors can send a custom header.</p>
+    <p><strong>Mailchimp is installed but switched off.</strong> The four Mailchimp tools are
+    deployed and return an explanatory error rather than failing oddly, because
+    <code>MAILCHIMP_API_KEY</code> is not in <code>.env</code>. Add it and restart to enable them.
+    The key's suffix (<code>-us15</code>) selects the data centre, so it must be pasted whole.</p>
   </div>
 </section>
 
 <footer>
-  <p>Source: github.com/zainsive/seo-analytics-mcp · Updated 27 October 2026</p>
+  <p>Source: github.com/zainsive/seo-analytics-mcp · Updated 11 November 2026</p>
 </footer>
 </div>
 </body>
