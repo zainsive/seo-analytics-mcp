@@ -176,20 +176,10 @@ def serve_http(host: str = "127.0.0.1", port: int = 8080) -> None:
         )
     from starlette.middleware.base import BaseHTTPMiddleware
 
-    from .bearer import TOKENS_VAR, make_middleware, parse_tokens
+    from .bearer import build_resolver, make_middleware
 
-    tokens = parse_tokens()
-    if not tokens:
-        # Refuse rather than serve openly. A hosted deployment with no credential
-        # required is one leaked URL away from handing over the analytics, and the
-        # failure is silent - nobody notices a server that answers everyone.
-        raise SystemExit(
-            f"Refusing to start: {TOKENS_VAR} is not set, so every request would be "
-            "answered without a credential. Set it to one or more comma-separated "
-            "'label:token' pairs, e.g.\n"
-            f"  {TOKENS_VAR}=alice:<token>   (seo-analytics-mcp token alice)\n"
-            "Issue one per person so a leaver can be revoked without rotating everyone."
-        )
+    # Refuses to start when no token exists anywhere, rather than serving openly.
+    resolve, token_summary = build_resolver()
 
     security = transport_security()
     if security is None:
@@ -205,12 +195,8 @@ def serve_http(host: str = "127.0.0.1", port: int = 8080) -> None:
     app = mcp.streamable_http_app(
         streamable_http_path=path, stateless_http=True, transport_security=security
     )
-    app.add_middleware(BaseHTTPMiddleware, dispatch=make_middleware(tokens))
-    log.warning(
-        "bearer token required on every request; %d token(s) accepted: %s",
-        len(tokens),
-        ", ".join(sorted(set(tokens.values()))),
-    )
+    app.add_middleware(BaseHTTPMiddleware, dispatch=make_middleware(resolve))
+    log.warning("bearer token required on every request; %s", token_summary)
     uvicorn.run(app, host=host, port=port, log_level=log_level().lower(), access_log=False)
 
 

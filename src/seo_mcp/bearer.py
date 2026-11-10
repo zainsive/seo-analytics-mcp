@@ -4,9 +4,13 @@ Every request to the MCP endpoint must carry `Authorization: Bearer <token>`.
 Anything else gets 401 and no further processing - the request never reaches a tool,
 a credential or Google.
 
-Tokens are issued per person rather than shared, so a leaver is revoked by deleting
-one line instead of rotating everyone. The label on each token is what appears in the
-logs; the token itself never is.
+Tokens are issued per person rather than shared, so one leaver is revoked without
+rotating everyone. The label on each token is what appears in the logs; the token
+itself never is.
+
+Tokens come from the SQLite store in tokens.py. `SEO_MCP_TOKENS` still works and is
+checked second, so a deployment whose database is missing or unreadable can still be
+brought up from the environment.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ import hmac
 import logging
 import os
 import secrets
+from collections.abc import Callable
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -56,8 +61,12 @@ def parse_tokens(raw: str | None = None) -> dict[str, str]:
     return out
 
 
-def identify(presented: str, tokens: dict[str, str]) -> str | None:
-    """Constant-time lookup. A plain dict hit would leak length and prefix through timing."""
+def identify_env(presented: str, tokens: dict[str, str]) -> str | None:
+    """Constant-time lookup over environment tokens, which are held in plaintext.
+
+    A plain dict hit would leak length and prefix through timing. The database path
+    needs no such care: it matches on a hash, so there is nothing to approximate.
+    """
     match = None
     for known, label in tokens.items():
         if hmac.compare_digest(presented, known):
@@ -73,8 +82,13 @@ def _unauthorised(detail: str) -> JSONResponse:
     )
 
 
-def make_middleware(tokens: dict[str, str]):
-    """Dispatch for Starlette's BaseHTTPMiddleware."""
+def make_middleware(resolve: Callable[[str], str | None]):
+    """Dispatch for Starlette's BaseHTTPMiddleware.
+
+    `resolve` is called per request rather than consulted from a cached snapshot. That
+    is what makes revocation immediate: the alternative is a restart, which disconnects
+    everyone to remove one person.
+    """
 
     async def dispatch(request: Request, call_next):
         if request.url.path in OPEN_PATHS:
@@ -95,7 +109,7 @@ def make_middleware(tokens: dict[str, str]):
             logger.warning("401 malformed header from %s", client)
             return _unauthorised("Authorization header must be of the form 'Bearer <your token>'.")
 
-        label = identify(presented.strip(), tokens)
+        label = resolve(presented.strip())
         if label is None:
             logger.warning("401 unrecognised token from %s", client)
             return _unauthorised("That token is not recognised. Ask for a current one.")
@@ -109,3 +123,44 @@ def make_middleware(tokens: dict[str, str]):
 
 def generate() -> str:
     return secrets.token_urlsafe(32)
+
+
+def build_resolver() -> tuple[Callable[[str], str | None], str]:
+    """The lookup used by the running server, plus a line describing it for the log.
+
+    Raises SystemExit when no token exists anywhere. Serving openly is never the
+    fallback: a hosted deployment that answers everyone is one leaked URL away from
+    handing over the analytics, and nothing about it looks broken.
+    """
+    from . import tokens as store
+
+    env_tokens = parse_tokens()
+    minted = store.active_count()
+
+    if not minted and not env_tokens:
+        raise SystemExit(
+            "Refusing to start: no access token exists, so every request would be "
+            "answered without a credential.\n"
+            "  Issue one per person:  seo-analytics-mcp token mint alice\n"
+            f"  Database:              {store.db_path()}\n"
+            f"Alternatively set {TOKENS_VAR} to comma-separated 'label:token' pairs, "
+            "though those are stored in plaintext and need a restart to change."
+        )
+
+    def resolve(presented: str) -> str | None:
+        if label := store.identify(presented):
+            return label
+        if store.is_known(presented):
+            # Issued here, but revoked or expired. Stop: falling through would let the
+            # same string sitting in SEO_MCP_TOKENS undo a revocation.
+            return None
+        return identify_env(presented, env_tokens)
+
+    described = f"{minted} token(s) in {store.db_path()}"
+    if env_tokens:
+        described += (
+            f", plus {len(env_tokens)} from {TOKENS_VAR} "
+            f"({', '.join(sorted(set(env_tokens.values())))}) - move these into the "
+            "database, where they are hashed rather than held in plaintext"
+        )
+    return resolve, described

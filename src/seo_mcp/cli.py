@@ -60,6 +60,10 @@ def _out(*parts: str) -> None:
     print(*parts)
 
 
+def _err(*parts: str) -> None:
+    print(*parts, file=sys.stderr)
+
+
 # --- auth --------------------------------------------------------------------
 
 
@@ -350,17 +354,66 @@ def cmd_profiles(args: argparse.Namespace) -> int:
 # --- serve -------------------------------------------------------------------
 
 
-def cmd_token(args: argparse.Namespace) -> int:
-    """Mint a token for one person. Printing it is the only time it is ever shown."""
-    from .bearer import TOKENS_VAR, generate
+def cmd_token_mint(args: argparse.Namespace) -> int:
+    """Mint a token for one person. Printing it is the only time it is ever readable."""
+    from . import tokens as store
 
-    token = generate()
-    label = args.label
-    _out(f"{label}:{token}")
+    try:
+        token = store.mint(args.label, days=args.days, note=args.note)
+    except ValueError as exc:
+        _err(str(exc))
+        return 2
+    _out(f"Token for {args.label}:")
     _out("")
-    _out(f"Append that to {TOKENS_VAR} in /opt/seo-analytics-mcp/.env (comma-separated),")
-    _out("restart the service, and give the token itself to that person. They send it as:")
-    _out(f"  Authorization: Bearer {token}")
+    _out(f"  {token}")
+    _out("")
+    _out("Only the hash of it is stored, so this is the one and only time it can be")
+    _out("read. Give it to that person now; if it is lost, revoke and mint another.")
+    _out("")
+    _out(f"Stored in {store.db_path()}")
+    if args.days:
+        _out(f"Expires in {args.days} day(s).")
+    _out("It takes effect immediately - no restart.")
+    return 0
+
+
+def cmd_token_list(args: argparse.Namespace) -> int:
+    """Who has access, and whether they are still using it."""
+    from . import tokens as store
+
+    found = store.rows()
+    if not found:
+        _out(f"No tokens issued yet ({store.db_path()}).")
+        _out("Issue one per person:  seo-analytics-mcp token mint alice")
+        return 0
+    _out(f"{'ID':>3}  {'LABEL':<18} {'STATE':<8} {'CREATED':<11} {'EXPIRES':<11} LAST USED")
+    for row in found:
+        if args.all or row["state"] == "active":
+            _out(
+                f"{row['id']:>3}  {row['label'][:18]:<18} {row['state']:<8} "
+                f"{row['created']:<11} {(row['expires'] or '-'):<11} "
+                f"{row['last_used'] or 'never'}"
+            )
+    hidden = sum(1 for r in found if r["state"] != "active")
+    if hidden and not args.all:
+        _out("")
+        _out(f"{hidden} revoked or expired token(s) hidden; pass --all to see them.")
+    _out("")
+    _out("'last used' is recorded at minute granularity, so read it as 'active around")
+    _out("then' rather than as an exact time.")
+    return 0
+
+
+def cmd_token_revoke(args: argparse.Namespace) -> int:
+    """Withdraw one person's access, effective on their next request."""
+    from . import tokens as store
+
+    revoked = store.revoke(args.selector)
+    if not revoked:
+        _err(f"No active token matches {args.selector!r}. Run `token list --all` to see them.")
+        return 1
+    _out(f"Revoked: {', '.join(revoked)}")
+    _out("Effective immediately - no restart. The row is kept as a record of access.")
     return 0
 
 
@@ -437,9 +490,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_http.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     p_http.set_defaults(func=cmd_serve_http)
 
-    p_tok = subs.add_parser("token", help="generate a bearer token for one person")
-    p_tok.add_argument("label", help="who it is for, e.g. alice")
-    p_tok.set_defaults(func=cmd_token)
+    p_tok = subs.add_parser("token", help="issue, list and revoke per-person access tokens")
+    tok_subs = p_tok.add_subparsers(dest="token_command", metavar="{mint,list,revoke}")
+
+    p_mint = tok_subs.add_parser("mint", help="issue a token for one person")
+    p_mint.add_argument("label", help="who it is for, e.g. alice")
+    p_mint.add_argument(
+        "--days", type=int, default=None, help="expire after this many days (default: never)"
+    )
+    p_mint.add_argument("--note", default=None, help="free text, e.g. 'contractor, Q4 project'")
+    p_mint.set_defaults(func=cmd_token_mint)
+
+    p_list = tok_subs.add_parser("list", help="show who has access")
+    p_list.add_argument("--all", action="store_true", help="include revoked and expired tokens")
+    p_list.set_defaults(func=cmd_token_list)
+
+    p_rev = tok_subs.add_parser("revoke", help="withdraw access by label or id")
+    p_rev.add_argument("selector", help="the label or the numeric id from `token list`")
+    p_rev.set_defaults(func=cmd_token_revoke)
+
+    # `token` with no subcommand should say what to do, not traceback.
+    p_tok.set_defaults(func=lambda _a: (p_tok.print_help(), 0)[1])
     return parser
 
 

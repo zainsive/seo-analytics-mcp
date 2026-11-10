@@ -24,8 +24,10 @@ def client():
         return JSONResponse({"status": "ok"})
 
     app = Starlette(routes=[Route("/mcp/x", ok, methods=["POST"]), Route("/healthz", health)])
+    env_tokens = {GOOD: "alice", OTHER: "bob"}
     app.add_middleware(
-        BaseHTTPMiddleware, dispatch=bearer.make_middleware({GOOD: "alice", OTHER: "bob"})
+        BaseHTTPMiddleware,
+        dispatch=bearer.make_middleware(lambda t: bearer.identify_env(t, env_tokens)),
     )
     return TestClient(app)
 
@@ -118,8 +120,10 @@ def test_no_token_value_ever_reaches_the_logs(client, caplog):
     assert "alice" in caplog.text  # the person is logged, the secret is not
 
 
-def test_identify_is_constant_time_by_construction():
-    """A dict lookup would leak token length and prefix through response timing."""
+def test_identify_env_is_constant_time_by_construction():
+    """Environment tokens are compared as plaintext, so a dict lookup would leak their
+    length and prefix through response timing. The database path matches on a hash and
+    needs no such care."""
     import inspect
 
-    assert "compare_digest" in inspect.getsource(bearer.identify)
+    assert "compare_digest" in inspect.getsource(bearer.identify_env)
