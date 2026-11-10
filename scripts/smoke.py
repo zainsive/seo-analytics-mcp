@@ -20,17 +20,27 @@ import tempfile
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-EXPECTED_TOOLS = 13
+EXPECTED_TOOLS = 17
 
 
 async def main(binary: str) -> int:
     home = tempfile.mkdtemp(prefix="seo-mcp-smoke-")
     env = {
-        **os.environ,
-        "SEO_MCP_HOME": home,  # a throwaway profile: your real token is untouched
-        "SEO_MCP_PROFILE": "default",
-        "SEO_MCP_LOG_LEVEL": "CRITICAL",
+        k: v
+        for k, v in os.environ.items()
+        # A developer .env or exported key would make this test the real credential
+        # instead of a clean install, which is the one thing it exists to check.
+        if not k.startswith(("SEO_MCP_", "GSC_", "GA4_", "INDEXNOW_", "MAILCHIMP_"))
     }
+    env.update(
+        {
+            "SEO_MCP_HOME": home,  # a throwaway profile: your real token is untouched
+            "SEO_MCP_PROFILE": "default",
+            "SEO_MCP_LOG_LEVEL": "CRITICAL",
+            # Point the .env loader at nothing, so cwd cannot supply credentials.
+            "SEO_MCP_ENV_FILE": os.path.join(home, "absent.env"),
+        }
+    )
     failures: list[str] = []
 
     def check(label: str, ok: bool, detail: str = "") -> None:
@@ -69,13 +79,13 @@ async def main(binary: str) -> int:
             )
             check(
                 "auth_status names the next command",
-                "seo-mcp auth --client-secret" in payload["next_step"],
+                "seo-analytics-mcp auth --client-secret" in payload["next_step"],
             )
 
             result = await session.call_tool("gsc_list_sites", {})
             text = result.content[0].text
             check("a tool with no token errors", result.is_error is True)
-            check("the error names the fix", "seo-mcp auth" in text)
+            check("the error names the fix", "seo-analytics-mcp auth" in text)
             check("no traceback reaches the model", "Traceback" not in text)
 
             result = await session.call_tool(

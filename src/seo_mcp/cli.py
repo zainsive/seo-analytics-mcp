@@ -350,6 +350,20 @@ def cmd_profiles(args: argparse.Namespace) -> int:
 # --- serve -------------------------------------------------------------------
 
 
+def cmd_token(args: argparse.Namespace) -> int:
+    """Mint a token for one person. Printing it is the only time it is ever shown."""
+    from .bearer import TOKENS_VAR, generate
+
+    token = generate()
+    label = args.label
+    _out(f"{label}:{token}")
+    _out("")
+    _out(f"Append that to {TOKENS_VAR} in /opt/seo-analytics-mcp/.env (comma-separated),")
+    _out("restart the service, and give the token itself to that person. They send it as:")
+    _out(f"  Authorization: Bearer {token}")
+    return 0
+
+
 def cmd_serve_http(args: argparse.Namespace) -> int:
     """The hosted deployment: one credential, many connecting AI tools."""
     from .server import endpoint_path, serve_http
@@ -422,6 +436,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_http.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     p_http.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     p_http.set_defaults(func=cmd_serve_http)
+
+    p_tok = subs.add_parser("token", help="generate a bearer token for one person")
+    p_tok.add_argument("label", help="who it is for, e.g. alice")
+    p_tok.set_defaults(func=cmd_token)
     return parser
 
 

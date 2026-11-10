@@ -58,6 +58,7 @@ from .tools import composite as _composite  # noqa: E402,F401
 from .tools import ga4_tools as _ga4_tools  # noqa: E402,F401
 from .tools import gsc_tools as _gsc_tools  # noqa: E402,F401
 from .tools import indexnow_tools as _indexnow_tools  # noqa: E402,F401
+from .tools import mailchimp_tools as _mailchimp_tools  # noqa: E402,F401
 from .tools import meta_tools as _meta_tools  # noqa: E402,F401
 
 
@@ -173,6 +174,23 @@ def serve_http(host: str = "127.0.0.1", port: int = 8080) -> None:
             DEFAULT_ENDPOINT_PATH,
             ENDPOINT_PATH_VAR,
         )
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    from .bearer import TOKENS_VAR, make_middleware, parse_tokens
+
+    tokens = parse_tokens()
+    if not tokens:
+        # Refuse rather than serve openly. A hosted deployment with no credential
+        # required is one leaked URL away from handing over the analytics, and the
+        # failure is silent - nobody notices a server that answers everyone.
+        raise SystemExit(
+            f"Refusing to start: {TOKENS_VAR} is not set, so every request would be "
+            "answered without a credential. Set it to one or more comma-separated "
+            "'label:token' pairs, e.g.\n"
+            f"  {TOKENS_VAR}=alice:<token>   (seo-analytics-mcp token alice)\n"
+            "Issue one per person so a leaver can be revoked without rotating everyone."
+        )
+
     security = transport_security()
     if security is None:
         log.warning(
@@ -186,6 +204,12 @@ def serve_http(host: str = "127.0.0.1", port: int = 8080) -> None:
         log.warning("accepting Host headers: %s", ", ".join(security.allowed_hosts))
     app = mcp.streamable_http_app(
         streamable_http_path=path, stateless_http=True, transport_security=security
+    )
+    app.add_middleware(BaseHTTPMiddleware, dispatch=make_middleware(tokens))
+    log.warning(
+        "bearer token required on every request; %d token(s) accepted: %s",
+        len(tokens),
+        ", ".join(sorted(set(tokens.values()))),
     )
     uvicorn.run(app, host=host, port=port, log_level=log_level().lower(), access_log=False)
 

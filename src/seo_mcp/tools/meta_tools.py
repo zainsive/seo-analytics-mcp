@@ -11,7 +11,7 @@ from typing import Any
 
 from .. import config, credentials
 from ..auth import scopes, store
-from ..clients import ga4, gsc
+from ..clients import ga4, gsc, mailchimp
 from ..server import mcp
 from . import _base
 
@@ -41,10 +41,28 @@ async def auth_status() -> dict[str, Any]:
                 "ga4_default_property": profile.default_property,
                 "indexnow_host": profile.indexnow_host,
                 "indexnow_key_configured": bool(profile.indexnow_key),
+                "mailchimp_configured": bool(profile.mailchimp_key),
             }
         ),
         "notes": [],
     }
+
+    # Mailchimp holds its own credential, independent of the Google one. Report it
+    # before any Google early-return, or configuring Mailchimp first yields silence.
+    if key := profile.mailchimp_key:
+        try:
+            account = await mailchimp.ping(key)
+            out["mailchimp"] = {
+                "reachable": True,
+                "account_name": account.account_name,
+                "data_center": account.data_center,
+                "total_subscribers": account.total_subscribers,
+            }
+        except Exception as exc:
+            out["mailchimp"] = {
+                "reachable": False,
+                "error": f"{type(exc).__name__}: {exc}"[:220],
+            }
 
     if identity["mode"] == "user":
         out["profile_dir"] = str(profile.root)

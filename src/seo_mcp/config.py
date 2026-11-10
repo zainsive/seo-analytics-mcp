@@ -84,6 +84,12 @@ class Profile:
     def indexnow_host(self) -> str | None:
         return self.default("indexnow_host", "INDEXNOW_HOST")
 
+    @property
+    def mailchimp_key(self) -> str | None:
+        """Never a tool argument: tool arguments appear in the transcript and may be
+        logged by the client."""
+        return self.default("mailchimp_key", "MAILCHIMP_API_KEY")
+
 
 def exports_enabled() -> bool:
     """Whether a large result may spill to a CSV on disk.

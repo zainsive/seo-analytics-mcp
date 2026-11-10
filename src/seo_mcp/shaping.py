@@ -37,6 +37,11 @@ _AVERAGED = frozenset(
         "userEngagementDuration",
         "sessionsPerUser",
         "screenPageViewsPerSession",
+        "open_rate",
+        "click_rate",
+        "unsubscribe_rate",
+        "bounce_rate",
+        "abuse_rate",
     }
 )
 
@@ -100,8 +105,15 @@ def _num(value: Any) -> float | None:
 
 # A rate is never the mean of per-row rates. Where both components are present, the
 # rate is recomputed from them; otherwise it is weighted by traffic.
-_RATIOS = (("ctr", "clicks", "impressions"), ("engagementRate", "engagedSessions", "sessions"))
-_WEIGHT_KEYS = ("impressions", "sessions")
+_RATIOS = (
+    ("ctr", "clicks", "impressions"),
+    ("engagementRate", "engagedSessions", "sessions"),
+    ("open_rate", "unique_opens", "emails_sent"),
+    ("click_rate", "unique_clicks", "emails_sent"),
+    ("unsubscribe_rate", "unsubscribes", "emails_sent"),
+    ("bounce_rate", "bounces", "emails_sent"),
+)
+_WEIGHT_KEYS = ("impressions", "sessions", "emails_sent")
 
 
 def _totals(rows: list[dict[str, Any]], metric_keys: tuple[str, ...] | list[str]) -> dict[str, Any]:

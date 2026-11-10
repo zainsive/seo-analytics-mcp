@@ -75,9 +75,15 @@ async def call(name, args):
 # --- registration ------------------------------------------------------------
 
 
-async def test_all_thirteen_tools_are_registered():
+async def test_the_whole_tool_roster_is_registered():
+    """Renaming or dropping a tool breaks every saved prompt a user has, so the roster
+    is pinned here rather than counted."""
     names = {t.name for t in await mcp.list_tools()}
     assert names == {
+        "mailchimp_list_audiences",
+        "mailchimp_list_campaigns",
+        "mailchimp_campaign_report",
+        "mailchimp_campaign_links",
         "auth_status",
         "gsc_list_sites",
         "gsc_search_analytics",
