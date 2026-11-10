@@ -18,12 +18,30 @@ ENV_FILE_VAR = "SEO_MCP_ENV_FILE"
 DEFAULT_NAMES = (".env", ".env.local")
 
 
+def _is_file(path: Path) -> bool:
+    """True only for a file we can actually see.
+
+    `Path.is_file()` raises instead of returning False when the parent directory cannot
+    be searched. That is the normal case for a service account invoked with `sudo -u`,
+    which inherits a working directory belonging to somebody else.
+    """
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
 def candidates(explicit: str | None = None) -> list[Path]:
     if explicit:
         return [Path(explicit).expanduser()]
     if from_env := os.environ.get(ENV_FILE_VAR):
         return [Path(from_env).expanduser()]
-    cwd = Path.cwd()
+    try:
+        cwd = Path.cwd()
+    except OSError:
+        # A deleted or unreadable working directory is not a reason to fail: there is
+        # simply no .env to find here.
+        return []
     return [cwd / name for name in DEFAULT_NAMES]
 
 
@@ -47,13 +65,14 @@ def _warn_if_world_readable(path: Path) -> None:
 def load(explicit: str | None = None) -> Path | None:
     """Apply the first .env found. Returns the file used, or None.
 
-    Neither a missing nor an unreadable file is an error. The recommended hardened
-    deployment keeps .env root-owned 0600 and lets systemd inject it via
-    EnvironmentFile before dropping privileges - so the service user cannot read it,
-    does not need to, and must not crash trying.
+    Neither a missing nor an unreadable file is an error, and neither is a working
+    directory we cannot look inside. The recommended hardened deployment keeps .env
+    root-owned 0600 and lets systemd inject it via EnvironmentFile before dropping
+    privileges - so the service user cannot read it, does not need to, and must not
+    crash trying.
     """
     for path in candidates(explicit):
-        if not path.is_file():
+        if not _is_file(path):
             continue
         _warn_if_world_readable(path)
         try:
