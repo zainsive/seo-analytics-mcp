@@ -280,7 +280,7 @@ def test_a_request_with_no_token_is_refused(gated):
 
 def test_the_refusal_says_what_to_send(gated):
     client, _ = gated
-    assert "Authorization: Bearer" in client.get("/mcp").json()["detail"]
+    assert bearer.PRIMARY_HEADER in client.get("/mcp").json()["detail"]
 
 
 def test_a_wrong_token_is_refused(gated):
@@ -369,12 +369,68 @@ def test_an_empty_x_authorization_falls_through_to_the_standard_header(gated):
 
 def test_the_refusal_names_the_header_to_send(gated):
     client, _ = gated
-    detail = client.get("/mcp").json()["detail"]
-    assert "X-Authorization: Bearer" in detail
-    assert "Authorization" in detail  # and says the standard name works too
+    assert bearer.PRIMARY_HEADER in client.get("/mcp").json()["detail"]
 
 
-def test_a_wrong_scheme_in_x_authorization_is_refused(gated):
+def test_a_scheme_other_than_bearer_is_refused_and_explained(gated):
     client, token = gated
-    assert client.get("/mcp", headers={"X-Authorization": token}).status_code == 401
-    assert client.get("/mcp", headers={"X-Authorization": f"Basic {token}"}).status_code == 401
+    response = client.get("/mcp", headers={"X-Authorization": f"Basic {token}"})
+    assert response.status_code == 401
+    assert "Basic" in response.json()["detail"]  # names what it saw, not just "no"
+
+
+# --- x-api-key, the name client UIs actually permit ---------------------------
+
+
+def test_the_key_is_accepted_under_x_api_key(gated):
+    """The documented name. claude.ai allowlists header names on custom connectors and
+    refuses to save an unapproved one, so the server has to meet the client here."""
+    client, token = gated
+    response = client.get("/mcp", headers={"x-api-key": token})
+    assert response.status_code == 200
+    assert response.json() == {"who": "alice"}
+
+
+def test_x_api_key_also_tolerates_a_bearer_prefix(gated):
+    client, token = gated
+    assert client.get("/mcp", headers={"x-api-key": f"Bearer {token}"}).status_code == 200
+
+
+@pytest.mark.parametrize("name", bearer.HEADER_NAMES)
+def test_every_accepted_header_name_works(gated, name):
+    """One of these is whatever a given connector dialog happens to offer."""
+    client, token = gated
+    assert client.get("/mcp", headers={name: token}).status_code == 200
+
+
+def test_x_api_key_wins_over_an_authorization_header(gated):
+    """A client or proxy may put its own OAuth token in Authorization. That must not
+    shadow the key somebody deliberately configured."""
+    client, token = gated
+    response = client.get(
+        "/mcp", headers={"x-api-key": token, "Authorization": "Bearer someone-elses-oauth"}
+    )
+    assert response.status_code == 200
+
+
+def test_bearer_with_nothing_after_it_is_explained(gated):
+    client, _ = gated
+    response = client.get("/mcp", headers={"x-api-key": "Bearer "})
+    assert response.status_code == 401
+    assert "no token after it" in response.json()["detail"]
+
+
+def test_surrounding_whitespace_is_forgiven(gated):
+    client, token = gated
+    assert client.get("/mcp", headers={"x-api-key": f"  {token}  "}).status_code == 200
+
+
+def test_the_documented_name_is_the_first_one_tried():
+    assert bearer.PRIMARY_HEADER == "x-api-key"
+    assert bearer.HEADER_NAMES[-1] == "authorization", "must be last: proxies inject it"
+
+
+def test_credential_reports_nothing_presented_distinctly_from_a_problem():
+    assert bearer.credential({}) == (None, None)
+    token, problem = bearer.credential({"x-api-key": "abc"})
+    assert (token, problem) == ("abc", None)

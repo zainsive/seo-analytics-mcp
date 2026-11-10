@@ -191,11 +191,11 @@ dl.pair dd{margin:0; color:var(--ink)}
     <li>
       <p>Find <strong>Request headers</strong> and add one:</p>
       <dl class="pair">
-        <dt>Name</dt><dd><code>x-authorization</code></dd>
-        <dt>Value</dt><dd><code>Bearer</code> then a space, then your key</dd>
+        <dt>Name</dt><dd><code>x-api-key</code></dd>
+        <dt>Value</dt><dd>your key, on its own</dd>
       </dl>
-      <p class="aside">The word and the space are both part of it. If there is no Request headers
-      section, choose <strong>No sign in</strong> and it will appear.</p>
+      <p class="aside">Paste the key by itself — nothing before it, no quotes around it. If there
+      is no Request headers section, choose <strong>No sign in</strong> and it will appear.</p>
     </li>
     <li>
       <p>Save, then ask your first question.</p>
@@ -324,8 +324,9 @@ dl.pair dd{margin:0; color:var(--ink)}
   <table>
     <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
     <tbody>
-      <tr><td>It is refused, or mentions 401</td><td>Check the header is named <code>x-authorization</code>, and that its value starts with <code>Bearer</code> and a space before the key</td></tr>
+      <tr><td>It is refused, or mentions 401</td><td>Check the header is named <code>x-api-key</code> and holds the whole key, with nothing else in the box</td></tr>
       <tr><td>It says it has no access to our website</td><td>Pass it on — a permission needs renewing</td></tr>
+      <tr><td>It says the header name is not approved</td><td>Use <code>x-api-key</code>. Claude only permits certain header names, and that is the one to pick from the list</td></tr>
       <tr><td>The connector does not appear</td><td>Check the whole link was pasted, including the long code at the end, then restart the app</td></tr>
       <tr><td>It reports the connector as offline</td><td>Use an ordinary chat rather than a Cowork or Code session</td></tr>
       <tr><td>It stops partway through an answer</td><td>Ask again. If it keeps happening, pass it on</td></tr>

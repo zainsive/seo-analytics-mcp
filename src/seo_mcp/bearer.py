@@ -1,14 +1,19 @@
 """Bearer-token gate for the hosted deployment.
 
-Every request to the MCP endpoint must carry `X-Authorization: Bearer <token>`.
+Every request to the MCP endpoint must carry the access token in a header.
 Anything else gets 401 and no further processing - the request never reaches a tool,
 a credential or Google.
 
-`Authorization` is accepted too, and checked second. X-Authorization is named first
-because client UIs and proxies routinely reserve or strip the standard header: some
-connector dialogs refuse to set it, and a proxy that implements its own auth may
-consume it before it reaches us. Either name carries the same value, so a client that
-can send the standard header is no worse off.
+`x-api-key` is the documented name, because that is what client UIs actually permit:
+claude.ai allowlists header names on custom connectors and rejects anything else when
+the connector is saved, and it reserves `Authorization` for its own OAuth token. Several
+equivalent spellings are accepted, since which ones a given dialog offers varies, and a
+name the client refuses to send is indistinguishable from a broken server.
+
+The `Bearer ` prefix is optional. `x-api-key` conventionally carries a bare key while
+`Authorization` requires the scheme, people paste whatever they were handed, and
+accepting either costs nothing: the token must still match exactly. It removes the
+single most common setup mistake.
 
 Tokens are issued per person rather than shared, so one leaver is revoked without
 rotating everyone. The label on each token is what appears in the logs; the token
@@ -34,8 +39,22 @@ logger = logging.getLogger(__name__)
 
 TOKENS_VAR = "SEO_MCP_TOKENS"
 OPEN_PATHS = ("/healthz",)  # uptime checks only; reveals nothing but a version string
-# In preference order. The first is what the docs and error messages name.
-HEADER_NAMES = ("x-authorization", "authorization")
+# In preference order; the first is what the docs and error messages name. The list is
+# broad on purpose: claude.ai only permits allowlisted header names and the offered set
+# differs between accounts, so narrowing this buys nothing and costs a support round
+# trip. `authorization` is checked LAST because a client or proxy may put its own OAuth
+# token there, which must not shadow the key somebody deliberately configured.
+HEADER_NAMES = (
+    "x-api-key",
+    "x-auth-token",
+    "x-apikey",
+    "api-key",
+    "apikey",
+    "x-api-token",
+    "x-authorization",
+    "authorization",
+)
+PRIMARY_HEADER = HEADER_NAMES[0]
 MIN_TOKEN_LEN = 24
 
 
@@ -82,6 +101,35 @@ def identify_env(presented: str, tokens: dict[str, str]) -> str | None:
     return match
 
 
+def credential(headers) -> tuple[str | None, str | None]:
+    """Pull the token out of whichever accepted header carries it.
+
+    Returns (token, problem); exactly one is set. A problem is a sentence for the 401
+    body, so a misconfigured client gets told what is wrong rather than just "no".
+    """
+    for name in HEADER_NAMES:
+        raw = (headers.get(name) or "").strip()
+        if not raw:
+            continue
+        scheme, sep, rest = raw.partition(" ")
+        if not sep:
+            if raw.lower() == "bearer":
+                # Stripping "Bearer " leaves "Bearer", which would otherwise be taken
+                # for a bare key and fail with the unhelpful "not recognised".
+                return None, f"The {name} header says 'Bearer' but carries no token after it."
+            return raw, None  # a bare key, as x-api-key conventionally carries it
+        if scheme.lower() == "bearer":
+            token = rest.strip()
+            if token:
+                return token, None
+            return None, f"The {name} header says 'Bearer' but carries no token after it."
+        return None, (
+            f"The {name} header uses the {scheme!r} scheme, which this server does not "
+            "accept. Send the token on its own, or prefixed with 'Bearer '."
+        )
+    return None, None  # nothing was presented at all
+
+
 def _unauthorised(detail: str) -> JSONResponse:
     return JSONResponse(
         {"error": "unauthorized", "detail": detail},
@@ -102,26 +150,21 @@ def make_middleware(resolve: Callable[[str], str | None]):
         if request.url.path in OPEN_PATHS:
             return await call_next(request)
 
-        header = next((v for n in HEADER_NAMES if (v := request.headers.get(n))), "")
-        scheme, _, presented = header.partition(" ")
+        presented, problem = credential(request.headers)
         peer = request.client.host if request.client else "?"
         client = request.headers.get("x-forwarded-for", peer)
 
-        if not header:
+        if problem:
+            logger.warning("401 malformed credential from %s", client)
+            return _unauthorised(problem)
+        if not presented:
             logger.warning("401 no credentials from %s %s", client, request.url.path)
             return _unauthorised(
-                "This server requires a bearer token. Send the header "
-                "'X-Authorization: Bearer <your token>' with every request. "
-                "('Authorization' is accepted too, where your client allows it.)"
-            )
-        if scheme.lower() != "bearer" or not presented.strip():
-            logger.warning("401 malformed header from %s", client)
-            return _unauthorised(
-                "The header must be of the form 'Bearer <your token>' - the word "
-                "'Bearer' and a space, then the token."
+                "This server requires an access token. Send it in an "
+                f"'{PRIMARY_HEADER}' header with every request."
             )
 
-        label = resolve(presented.strip())
+        label = resolve(presented)
         if label is None:
             logger.warning("401 unrecognised token from %s", client)
             return _unauthorised("That token is not recognised. Ask for a current one.")

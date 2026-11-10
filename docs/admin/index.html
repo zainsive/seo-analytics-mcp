@@ -115,6 +115,7 @@ footer{margin-top:58px; padding-top:22px; border-top:1px solid var(--hair);
     <li>uv-managed Python 3.13. The box ships 3.14, which has no <code>grpcio</code> wheels, so GA4 would have needed a source build.</li>
     <li>Read-only by policy: in service-account mode the sitemap-submitting tool is unregistered rather than merely blocked.</li>
     <li>Access tokens in SQLite, stored as SHA-256 only. The file can be copied off the box and grants nobody access, and revoking takes effect on the next request rather than needing a restart that disconnects everyone.</li>
+    <li>The token is read from <code>x-api-key</code> and several equivalent names, with or without a <code>Bearer</code> prefix. claude.ai allowlists header names on custom connectors and reserves <code>Authorization</code> for its own OAuth token, so a server insisting on one spelling is a server the client cannot be pointed at.</li>
   </ul>
 </section>
 
@@ -198,7 +199,7 @@ ssh stg-vps 'sudo install -m 644 /tmp/d.html /var/www/mcp-docs/index.html'</code
       <tr><td>Permission error on every query</td><td>Service account not granted on the property</td></tr>
       <tr><td class="k">421 Invalid Host header</td><td><code>SEO_MCP_ALLOWED_HOSTS</code> does not list the hostname in use</td></tr>
       <tr><td class="k">404 at the connector URL</td><td>Wrong or rotated path — check <code>SEO_MCP_ENDPOINT_PATH</code></td></tr>
-      <tr><td class="k">401 unauthorized</td><td>No token, a revoked one, or the header is misnamed. Accepted names are <code>x-authorization</code> and <code>authorization</code>, value <code>Bearer &lt;token&gt;</code></td></tr>
+      <tr><td class="k">401 unauthorized</td><td>No token, a revoked one, or the header is misnamed. Documented name is <code>x-api-key</code> carrying a bare token; see <code>HEADER_NAMES</code> in <code>bearer.py</code> for the names accepted. The 401 body says which fault it was</td></tr>
       <tr><td>Connects then drops</td><td><code>proxy_read_timeout</code> too low</td></tr>
       <tr><td>Hangs and never responds</td><td><code>proxy_buffering off</code> missing</td></tr>
       <tr><td class="k">400 from GA4</td><td>Incompatible metric and dimension pair</td></tr>

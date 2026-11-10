@@ -75,7 +75,6 @@ def test_a_valid_token_reaches_the_app_and_is_attributed(client):
         ({"Authorization": ""}, "empty header"),
         ({"Authorization": "Bearer "}, "bearer with no token"),
         ({"Authorization": f"Basic {GOOD}"}, "right token, wrong scheme"),
-        ({"Authorization": GOOD}, "token with no scheme"),
         ({"Authorization": "Bearer " + "C" * 40}, "unknown token"),
         ({"Authorization": f"Bearer {GOOD[:-1]}"}, "token off by one character"),
         ({"Authorization": f"Bearer {GOOD} extra"}, "trailing junk"),
@@ -98,7 +97,16 @@ def test_a_401_carries_a_bearer_challenge(client):
 
 
 def test_the_401_body_says_how_to_authenticate(client):
-    assert "Authorization: Bearer" in client.post("/mcp/x").json()["detail"]
+    assert bearer.PRIMARY_HEADER in client.post("/mcp/x").json()["detail"]
+
+
+def test_a_bare_token_is_accepted_without_the_bearer_prefix(client):
+    """Deliberate leniency, reversing an earlier stricter rule. x-api-key conventionally
+    carries a bare key, people paste whatever they were handed, and the token must still
+    match exactly - so refusing it only produced a 401 nobody could diagnose."""
+    r = client.post("/mcp/x", headers={"Authorization": GOOD})
+    assert r.status_code == 200
+    assert r.json()["who"] == "alice"
 
 
 def test_health_stays_open_for_uptime_checks(client):

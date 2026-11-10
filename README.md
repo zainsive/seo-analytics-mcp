@@ -285,10 +285,15 @@ seo-analytics-mcp token list                  # who has access, and when they la
 seo-analytics-mcp token revoke alice          # effective on the next request, no restart
 ```
 
-Clients send it as `X-Authorization: Bearer <token>`. The standard
-`Authorization` header is accepted too and checked second — X-Authorization is
-named first because connector UIs and proxies routinely reserve or strip the
-standard one.
+Clients send it in an `x-api-key` header, as a bare token. Several equivalent
+names are accepted (`x-auth-token`, `x-apikey`, `api-key`, `apikey`,
+`x-api-token`, `x-authorization`, `authorization`), and a `Bearer ` prefix is
+optional throughout.
+
+`x-api-key` is documented because that is what client UIs permit: claude.ai
+allowlists header names on custom connectors, refuses to save an unapproved one,
+and reserves `Authorization` for its own OAuth token. `authorization` is checked
+last so a proxy's own token cannot shadow a deliberately configured key.
 
 Only the SHA-256 of each token is stored, so the database can be copied off the host
 and still grants nobody access. Revocation is immediate because the gate queries per
