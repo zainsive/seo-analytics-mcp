@@ -8,6 +8,7 @@ directory, so it never touches your real token.
     python scripts/smoke.py                     # uses `seo-mcp` from PATH
     python scripts/smoke.py ./.venv/bin/seo-mcp # or an explicit binary
 """
+
 from __future__ import annotations
 
 import asyncio

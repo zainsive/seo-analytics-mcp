@@ -12,11 +12,12 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from mcp.server.mcpserver.exceptions import ToolError
 
-from ..shaping import QueryResult, normalise_url
+from ..shaping import QueryResult, aggregate_rows, normalise_url
 
 API = "mailchimp.com"
 VERSION = "3.0"
@@ -168,7 +169,7 @@ async def list_audiences(key: str) -> QueryResult:
         rows=rows,
         dimension_keys=("audience_id", "name", "created"),
         metric_keys=("members", "unsubscribed", "open_rate", "click_rate"),
-        source="gsc",
+        source="mailchimp",
         total_rows=payload.get("total_items", len(rows)),
         meta={"account": "mailchimp"},
         notes=notes,
@@ -222,7 +223,7 @@ async def list_campaigns(
         rows=rows,
         dimension_keys=("campaign_id", "sent", "subject", "audience"),
         metric_keys=("emails_sent", "unique_opens", "unique_clicks", "open_rate", "click_rate"),
-        source="gsc",
+        source="mailchimp",
         total_rows=payload.get("total_items", len(rows)),
         meta={"account": "mailchimp"},
         notes=notes,
@@ -259,40 +260,96 @@ async def campaign_report(key: str, campaign_id: str) -> dict[str, Any]:
     }
 
 
-async def campaign_links(key: str, campaign_id: str, *, limit: int = 100) -> QueryResult:
-    """Which links were clicked, each carrying a normalised path.
+def _same_site(host: str, site_host: str) -> bool:
+    """The site and its subdomains count; a host that merely ends in the same letters
+    does not, so 'notexample.com' is not matched by 'example.com'."""
+    return host == site_host or host.endswith("." + site_host)
 
-    That `path` key is the whole point: it is the same key Search Console pages and GA4
-    landing pages are reduced to, so email clicks can be lined up against organic
-    traffic for the same page without any further work.
+
+async def campaign_links(
+    key: str, campaign_id: str, *, limit: int = 100, site_host: str | None = None
+) -> QueryResult:
+    """Which links recipients clicked, with on-site links carrying a joinable path.
+
+    `path` is the key Search Console pages and GA4 landing pages reduce to, so email
+    clicks line up against organic traffic for the same page. It is set ONLY for links
+    on `site_host`: most campaigns link to LinkedIn, Facebook and YouTube in the footer,
+    and those reduce to paths like '/company/acme' - or '/' - which would join against
+    unrelated pages of the site, and against its homepage.
     """
     payload = await _get(
         key,
         f"/reports/{campaign_id}/click-details",
         {"count": max(1, min(limit, PAGE_MAX)), "sort_field": "total_clicks", "sort_dir": "DESC"},
     )
-    rows = []
+    placements = []
     for item in payload.get("urls_clicked", []):
         url = item.get("url") or ""
-        rows.append(
+        host = (urlsplit(url).hostname or "").removeprefix("www.")
+        on_site = bool(site_host) and _same_site(host, site_host)
+        placements.append(
             {
                 "url": url,
-                "path": normalise_url(url) if url else "",
+                "host": host,
+                "path": normalise_url(url) if (url and on_site) else "",
                 "clicks": int(item.get("total_clicks") or 0),
                 "unique_clicks": int(item.get("unique_clicks") or 0),
             }
         )
+
+    # One URL placed twice in an email gets two tracked link ids, each with its own real
+    # clicks - the campaign's clicks_total counts both. So they are summed, not dropped:
+    # the question is "which links were clicked", and two identical rows answer nothing.
+    first: dict[str, dict[str, Any]] = {}
+    for row in placements:
+        first.setdefault(row["url"], row)
+    merged = aggregate_rows(placements, key="url", metric_keys=("clicks", "unique_clicks"))
+    rows = [
+        {
+            "url": url,
+            "host": first[url]["host"],
+            "path": first[url]["path"],
+            "clicks": group["clicks"],
+            "unique_clicks": group["unique_clicks"],
+        }
+        for url, group in merged.items()
+    ]
+    rows.sort(key=lambda r: r["clicks"], reverse=True)
+    collapsed = sum(1 for g in merged.values() if g.get("_merged_from", 1) > 1)
+
+    upstream = int(payload.get("total_items") or len(placements))
+    notes = []
+    if site_host:
+        notes.append(
+            f"'path' is set only for links on {site_host} and is directly comparable "
+            "with the 'path' key on GA4 landing pages and Search Console page rows. "
+            "Off-site links carry 'host' and an empty 'path' - do not join on those."
+        )
+    else:
+        notes.append(
+            "'path' is empty on every row because no site is configured, so on-site "
+            "links cannot be told from links to social networks. Set GSC_DEFAULT_SITE "
+            "to have paths that join against GA4 and Search Console."
+        )
+    if collapsed:
+        notes.append(
+            f"{collapsed} URL(s) appeared more than once in the email; each placement is "
+            "tracked separately by Mailchimp and their clicks are summed here. Summed "
+            "'unique_clicks' can therefore exceed the number of distinct people, since "
+            "someone who clicked two placements of one link counts in each."
+        )
+    notes.append(
+        "Click counts exclude recipients whose mail client blocked tracking, so "
+        "they undercount slightly."
+    )
     return QueryResult(
         rows=rows,
-        dimension_keys=("url", "path"),
+        dimension_keys=("url", "host", "path"),
         metric_keys=("clicks", "unique_clicks"),
-        source="gsc",
-        total_rows=payload.get("total_items", len(rows)),
+        source="mailchimp",
+        # After grouping, the matched count is the number of distinct URLs - but only
+        # when every placement was fetched. Otherwise upstream really does hold more.
+        total_rows=len(rows) if len(placements) >= upstream else upstream,
         meta={"account": "mailchimp", "campaign_id": campaign_id},
-        notes=[
-            "'path' is the link reduced to a site path, directly comparable with the "
-            "'path' key on GA4 landing pages and Search Console page rows.",
-            "Click counts exclude recipients whose mail client blocked tracking, so "
-            "they undercount slightly.",
-        ],
+        notes=notes,
     )

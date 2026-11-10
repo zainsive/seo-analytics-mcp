@@ -54,7 +54,7 @@ class QueryResult:
     rows: list[dict[str, Any]]
     dimension_keys: tuple[str, ...]
     metric_keys: tuple[str, ...]
-    source: Literal["gsc", "ga4"]
+    source: Literal["gsc", "ga4", "mailchimp"]
     total_rows: int | None = None  # upstream availability, when known
     meta: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)  # caveats travel WITH the data
@@ -121,7 +121,8 @@ def _totals(rows: list[dict[str, Any]], metric_keys: tuple[str, ...] | list[str]
 
     Summing 'position' across 250 rows is meaningless, so averaged metrics are weighted
     by whichever traffic column the source provides (impressions for Search Console,
-    sessions for GA4) and plain-averaged only when neither is present.
+    sessions for GA4, emails_sent for Mailchimp) and plain-averaged only when none is
+    present.
     """
     out: dict[str, Any] = {}
     weight_key = next((k for k in _WEIGHT_KEYS if any(r.get(k) is not None for r in rows)), None)

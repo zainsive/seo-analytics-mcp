@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 from mcp.server.mcpserver.exceptions import ToolError
 
@@ -25,6 +26,20 @@ def _key() -> str:
             "tool arguments are visible in the transcript."
         )
     return key
+
+
+def _site_host() -> str | None:
+    """The site whose links count as on-site. Without it a link to the user's own
+    /pricing cannot be told from a LinkedIn link, and neither can be joined safely."""
+    profile = config.active_profile()
+    site = profile.default_site
+    if site:
+        if site.startswith("sc-domain:"):
+            return site.removeprefix("sc-domain:").removeprefix("www.") or None
+        host = urlsplit(site).hostname
+        if host:
+            return host.removeprefix("www.")
+    return (profile.indexnow_host or "").removeprefix("www.") or None
 
 
 def _day(value: str | None) -> str | None:
@@ -94,18 +109,19 @@ async def mailchimp_campaign_report(campaign_id: str) -> dict[str, Any]:
     """
     profile = config.active_profile()
     key = _key()
-    ck = cache.key(profile, "mailchimp.report", {"campaign_id": campaign_id})
+    host = _site_host()
+    ck = cache.key(profile, "mailchimp.report", {"campaign_id": campaign_id, "host": host})
 
     async def producer():
         from ..shaping import QueryResult
 
         report = await mailchimp.campaign_report(key, campaign_id)
-        links = await mailchimp.campaign_links(key, campaign_id, limit=50)
+        links = await mailchimp.campaign_links(key, campaign_id, limit=50, site_host=host)
         return QueryResult(
             rows=[report],
             dimension_keys=tuple(report),
             metric_keys=(),
-            source="gsc",
+            source="mailchimp",
             total_rows=1,
             meta={"links": links.rows, "link_notes": links.notes},
         )
@@ -129,17 +145,24 @@ async def mailchimp_campaign_report(campaign_id: str) -> dict[str, Any]:
 async def mailchimp_campaign_links(campaign_id: str, limit: int = 50) -> ShapedResponse:
     """Which links a campaign's recipients clicked, most-clicked first.
 
-    Every row carries a normalised 'path' alongside the full URL, so these rows line up
-    with the 'path' key on GA4 landing pages and Search Console page rows - use it to
-    see how a campaign's traffic to a page compares with that page's organic traffic.
+    Rows for links on the configured site carry a normalised 'path' alongside the full
+    URL, so they line up with the 'path' key on GA4 landing pages and Search Console
+    page rows - use it to compare a campaign's traffic to a page with that page's
+    organic traffic. Off-site links (social footers and the like) carry their 'host'
+    and an empty 'path'.
     """
     profile = config.active_profile()
     key = _key()
-    ck = cache.key(profile, "mailchimp.clicks", {"campaign_id": campaign_id, "limit": limit})
+    host = _site_host()
+    ck = cache.key(
+        profile,
+        "mailchimp.clicks",
+        {"campaign_id": campaign_id, "limit": limit, "host": host},
+    )
     result = await cache.get_or_set(
         profile,
         ck,
         ttl=TTL,
-        producer=lambda: mailchimp.campaign_links(key, campaign_id, limit=limit),
+        producer=lambda: mailchimp.campaign_links(key, campaign_id, limit=limit, site_host=host),
     )
     return shape(result, top_n=limit, sort_by="clicks", export_dir=_base.export_dir(profile))

@@ -172,7 +172,7 @@ async def test_clicked_links_carry_a_path_that_joins_to_the_other_sources(stub):
             }
         }
     )
-    result = await mailchimp.campaign_links(KEY, "camp1")
+    result = await mailchimp.campaign_links(KEY, "camp1", site_host="stgconsulting.com")
     # The same normalisation Search Console pages and GA4 landing pages go through.
     assert result.rows[0]["path"] == "/services/fractional-cto"
     assert result.rows[1]["path"] == "/about-us"
@@ -281,3 +281,120 @@ async def test_an_unusable_date_names_the_accepted_forms(monkeypatch):
     monkeypatch.setenv("MAILCHIMP_API_KEY", KEY)
     with pytest.raises(ToolError, match="YYYY-MM-DD"):
         await mcp.call_tool("mailchimp_list_campaigns", {"since": "last spring"})
+
+
+async def test_every_payload_is_labelled_mailchimp_not_a_google_source(stub):
+    """The source label travels into summary['source'], so mislabelling it tells the
+    model this campaign data came from Search Console - and invites the GSC caveats,
+    which do not apply."""
+    stub(
+        {
+            "/lists": {"total_items": 1, "lists": [{"id": "a", "name": "L", "stats": {}}]},
+            "/campaigns": {"total_items": 0, "campaigns": []},
+            "/reports/c1/click-details": {"total_items": 0, "urls_clicked": []},
+        }
+    )
+    for result in (
+        await mailchimp.list_audiences(KEY),
+        await mailchimp.list_campaigns(KEY),
+        await mailchimp.campaign_links(KEY, "c1"),
+    ):
+        assert result.source == "mailchimp"
+
+
+async def test_off_site_links_get_no_path_so_nothing_joins_them_to_the_site(stub):
+    """A campaign footer links to LinkedIn and Facebook. Those reduce to '/company/stg'
+    and '/', which would join against a real page of the site and against its homepage -
+    the same host-stripping collision that once misreported the homepage."""
+    stub(
+        {
+            "/click-details": {
+                "total_items": 3,
+                "urls_clicked": [
+                    {
+                        "url": "https://www.linkedin.com/company/stg?utm_medium=email",
+                        "total_clicks": 473,
+                        "unique_clicks": 454,
+                    },
+                    {
+                        "url": "http://www.facebook.com/stg",
+                        "total_clicks": 467,
+                        "unique_clicks": 445,
+                    },
+                    {
+                        "url": "https://stgconsulting.com/government/software-modernization/",
+                        "total_clicks": 27,
+                        "unique_clicks": 12,
+                    },
+                ],
+            }
+        }
+    )
+    result = await mailchimp.campaign_links(KEY, "camp1", site_host="stgconsulting.com")
+    by_host = {r["host"]: r for r in result.rows}
+    assert by_host["linkedin.com"]["path"] == ""
+    assert by_host["facebook.com"]["path"] == ""
+    assert by_host["stgconsulting.com"]["path"] == "/government/software-modernization"
+    assert any("do not join on those" in n for n in result.notes)
+
+
+async def test_a_subdomain_counts_as_the_site_but_a_lookalike_does_not(stub):
+    stub(
+        {
+            "/click-details": {
+                "total_items": 2,
+                "urls_clicked": [
+                    {"url": "https://blog.example.com/post", "total_clicks": 5, "unique_clicks": 5},
+                    {"url": "https://notexample.com/post", "total_clicks": 4, "unique_clicks": 4},
+                ],
+            }
+        }
+    )
+    result = await mailchimp.campaign_links(KEY, "camp1", site_host="example.com")
+    by_host = {r["host"]: r for r in result.rows}
+    assert by_host["blog.example.com"]["path"] == "/post"
+    assert by_host["notexample.com"]["path"] == ""
+
+
+async def test_with_no_site_configured_no_row_claims_a_joinable_path(stub):
+    stub(
+        {
+            "/click-details": {
+                "total_items": 1,
+                "urls_clicked": [
+                    {"url": "https://example.com/pricing", "total_clicks": 5, "unique_clicks": 5}
+                ],
+            }
+        }
+    )
+    result = await mailchimp.campaign_links(KEY, "camp1")
+    assert result.rows[0]["path"] == ""
+    assert any("GSC_DEFAULT_SITE" in n for n in result.notes)
+
+
+async def test_one_url_placed_twice_is_summed_not_shown_twice_nor_dropped(stub):
+    """Mailchimp tracks each placement of a URL under its own link id, and the
+    campaign's clicks_total counts both - so 27 + 27 is the real figure for that URL.
+    Dropping the second row would lose 27 real clicks; keeping it shows two identical
+    rows that answer nothing."""
+    stub(
+        {
+            "/click-details": {
+                "total_items": 3,
+                "urls_clicked": [
+                    {"url": "https://example.com/offer/", "total_clicks": 27, "unique_clicks": 12},
+                    {"url": "https://example.com/offer/", "total_clicks": 27, "unique_clicks": 12},
+                    {"url": "https://example.com/blog", "total_clicks": 10, "unique_clicks": 9},
+                ],
+            }
+        }
+    )
+    result = await mailchimp.campaign_links(KEY, "camp1", site_host="example.com")
+    assert len(result.rows) == 2
+    offer = next(r for r in result.rows if r["path"] == "/offer")
+    assert offer["clicks"] == 54 and offer["unique_clicks"] == 24
+    # Totals must still reconcile with what Mailchimp reports for the campaign.
+    assert sum(r["clicks"] for r in result.rows) == 64
+    # And the count must not claim rows are missing upstream.
+    assert result.total_rows == 2
+    assert any("tracked separately" in n for n in result.notes)
