@@ -191,7 +191,7 @@ dl.pair dd{margin:0; color:var(--ink)}
     <li>
       <p>Find <strong>Request headers</strong> and add one:</p>
       <dl class="pair">
-        <dt>Name</dt><dd><code>authorization</code></dd>
+        <dt>Name</dt><dd><code>x-authorization</code></dd>
         <dt>Value</dt><dd><code>Bearer</code> then a space, then your key</dd>
       </dl>
       <p class="aside">The word and the space are both part of it. If there is no Request headers
@@ -324,7 +324,7 @@ dl.pair dd{margin:0; color:var(--ink)}
   <table>
     <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
     <tbody>
-      <tr><td>It is refused, or mentions 401</td><td>The key is missing or mistyped. Check the value starts with <code>Bearer</code> and a space, and that the whole key follows</td></tr>
+      <tr><td>It is refused, or mentions 401</td><td>Check the header is named <code>x-authorization</code>, and that its value starts with <code>Bearer</code> and a space before the key</td></tr>
       <tr><td>It says it has no access to our website</td><td>Pass it on — a permission needs renewing</td></tr>
       <tr><td>The connector does not appear</td><td>Check the whole link was pasted, including the long code at the end, then restart the app</td></tr>
       <tr><td>It reports the connector as offline</td><td>Use an ordinary chat rather than a Cowork or Code session</td></tr>

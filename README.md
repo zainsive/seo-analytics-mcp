@@ -285,7 +285,10 @@ seo-analytics-mcp token list                  # who has access, and when they la
 seo-analytics-mcp token revoke alice          # effective on the next request, no restart
 ```
 
-Clients send it as `Authorization: Bearer <token>`.
+Clients send it as `X-Authorization: Bearer <token>`. The standard
+`Authorization` header is accepted too and checked second — X-Authorization is
+named first because connector UIs and proxies routinely reserve or strip the
+standard one.
 
 Only the SHA-256 of each token is stored, so the database can be copied off the host
 and still grants nobody access. Revocation is immediate because the gate queries per

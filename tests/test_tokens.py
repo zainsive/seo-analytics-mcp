@@ -316,3 +316,65 @@ def test_revoking_locks_a_live_client_out_on_its_next_request(db, gated):
     assert client.get("/mcp", headers={"Authorization": f"Bearer {token}"}).status_code == 200
     store.revoke("alice", path=db)
     assert client.get("/mcp", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+
+# --- which header the token may arrive in -------------------------------------
+
+
+def test_the_token_is_accepted_in_x_authorization(gated):
+    """The primary name. Connector UIs and proxies routinely reserve or strip the
+    standard Authorization header, so the token needs a name nothing else claims."""
+    client, token = gated
+    response = client.get("/mcp", headers={"X-Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json() == {"who": "alice"}
+
+
+def test_the_standard_authorization_header_still_works(gated):
+    """Kept so a client already configured with it does not break."""
+    client, token = gated
+    assert client.get("/mcp", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+
+def test_the_header_name_is_matched_case_insensitively(gated):
+    client, token = gated
+    for name in ("x-authorization", "X-AUTHORIZATION", "X-Authorization"):
+        assert client.get("/mcp", headers={name: f"Bearer {token}"}).status_code == 200
+
+
+def test_x_authorization_is_preferred_when_both_are_sent(gated):
+    """A proxy that injects its own Authorization must not be able to override the
+    header the client actually set."""
+    client, token = gated
+    response = client.get(
+        "/mcp",
+        headers={"X-Authorization": f"Bearer {token}", "Authorization": "Bearer wrong"},
+    )
+    assert response.status_code == 200
+
+
+def test_a_good_standard_header_is_used_when_x_authorization_is_absent(gated):
+    client, token = gated
+    assert client.get("/mcp", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+
+def test_an_empty_x_authorization_falls_through_to_the_standard_header(gated):
+    """An empty header is not a credential, so it must not mask a valid one."""
+    client, token = gated
+    response = client.get(
+        "/mcp", headers={"X-Authorization": "", "Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+
+
+def test_the_refusal_names_the_header_to_send(gated):
+    client, _ = gated
+    detail = client.get("/mcp").json()["detail"]
+    assert "X-Authorization: Bearer" in detail
+    assert "Authorization" in detail  # and says the standard name works too
+
+
+def test_a_wrong_scheme_in_x_authorization_is_refused(gated):
+    client, token = gated
+    assert client.get("/mcp", headers={"X-Authorization": token}).status_code == 401
+    assert client.get("/mcp", headers={"X-Authorization": f"Basic {token}"}).status_code == 401

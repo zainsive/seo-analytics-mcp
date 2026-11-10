@@ -198,7 +198,7 @@ ssh stg-vps 'sudo install -m 644 /tmp/d.html /var/www/mcp-docs/index.html'</code
       <tr><td>Permission error on every query</td><td>Service account not granted on the property</td></tr>
       <tr><td class="k">421 Invalid Host header</td><td><code>SEO_MCP_ALLOWED_HOSTS</code> does not list the hostname in use</td></tr>
       <tr><td class="k">404 at the connector URL</td><td>Wrong or rotated path — check <code>SEO_MCP_ENDPOINT_PATH</code></td></tr>
-      <tr><td class="k">401 unauthorized</td><td>Bearer tokens enabled and the request has none, or the token was revoked</td></tr>
+      <tr><td class="k">401 unauthorized</td><td>No token, a revoked one, or the header is misnamed. Accepted names are <code>x-authorization</code> and <code>authorization</code>, value <code>Bearer &lt;token&gt;</code></td></tr>
       <tr><td>Connects then drops</td><td><code>proxy_read_timeout</code> too low</td></tr>
       <tr><td>Hangs and never responds</td><td><code>proxy_buffering off</code> missing</td></tr>
       <tr><td class="k">400 from GA4</td><td>Incompatible metric and dimension pair</td></tr>

@@ -1,8 +1,14 @@
 """Bearer-token gate for the hosted deployment.
 
-Every request to the MCP endpoint must carry `Authorization: Bearer <token>`.
+Every request to the MCP endpoint must carry `X-Authorization: Bearer <token>`.
 Anything else gets 401 and no further processing - the request never reaches a tool,
 a credential or Google.
+
+`Authorization` is accepted too, and checked second. X-Authorization is named first
+because client UIs and proxies routinely reserve or strip the standard header: some
+connector dialogs refuse to set it, and a proxy that implements its own auth may
+consume it before it reaches us. Either name carries the same value, so a client that
+can send the standard header is no worse off.
 
 Tokens are issued per person rather than shared, so one leaver is revoked without
 rotating everyone. The label on each token is what appears in the logs; the token
@@ -28,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 TOKENS_VAR = "SEO_MCP_TOKENS"
 OPEN_PATHS = ("/healthz",)  # uptime checks only; reveals nothing but a version string
+# In preference order. The first is what the docs and error messages name.
+HEADER_NAMES = ("x-authorization", "authorization")
 MIN_TOKEN_LEN = 24
 
 
@@ -94,7 +102,7 @@ def make_middleware(resolve: Callable[[str], str | None]):
         if request.url.path in OPEN_PATHS:
             return await call_next(request)
 
-        header = request.headers.get("authorization", "")
+        header = next((v for n in HEADER_NAMES if (v := request.headers.get(n))), "")
         scheme, _, presented = header.partition(" ")
         peer = request.client.host if request.client else "?"
         client = request.headers.get("x-forwarded-for", peer)
@@ -103,11 +111,15 @@ def make_middleware(resolve: Callable[[str], str | None]):
             logger.warning("401 no credentials from %s %s", client, request.url.path)
             return _unauthorised(
                 "This server requires a bearer token. Send the header "
-                "'Authorization: Bearer <your token>' with every request."
+                "'X-Authorization: Bearer <your token>' with every request. "
+                "('Authorization' is accepted too, where your client allows it.)"
             )
         if scheme.lower() != "bearer" or not presented.strip():
             logger.warning("401 malformed header from %s", client)
-            return _unauthorised("Authorization header must be of the form 'Bearer <your token>'.")
+            return _unauthorised(
+                "The header must be of the form 'Bearer <your token>' - the word "
+                "'Bearer' and a space, then the token."
+            )
 
         label = resolve(presented.strip())
         if label is None:
