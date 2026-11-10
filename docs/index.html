@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>SEO Connector — STG Consulting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='15' fill='none' stroke='%2316595F' stroke-width='2'/><path d='M10 19l4-6 3.5 4L23 11' fill='none' stroke='%2316595F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+:root{
+  color-scheme:light;
+  --paper:#FFFFFF; --ink:#1A1D1D; --ink-2:#555C5C; --ink-3:#8A9191;
+  --hair:#E4E6E5; --hair-2:#CFD3D2;
+  --accent:#16595F;
+  --quiet:#F6F8F7;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --sans:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:62px}
+body{margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--serif); font-size:19px; line-height:1.72;
+  -webkit-font-smoothing:antialiased}
+img,svg{max-width:100%}
+
+.bar{position:sticky; top:0; z-index:20; background:rgba(255,255,255,.94);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--hair)}
+.bar-in{max-width:760px; margin:0 auto; display:flex; align-items:center; gap:20px;
+  flex-wrap:wrap; padding:12px max(22px,env(safe-area-inset-left,0px))}
+.mark{font-family:var(--sans); font-size:14px; font-weight:600; color:var(--ink)}
+.bar nav{display:flex; gap:18px; flex-wrap:wrap; margin-left:auto;
+  font-family:var(--sans); font-size:14px}
+.bar nav a{color:var(--ink-3); text-decoration:none}
+.bar nav a:hover{color:var(--accent)}
+.bar nav a:focus-visible{outline:2px solid var(--accent); outline-offset:3px}
+
+.page{max-width:760px; margin:0 auto; padding:0 max(22px,env(safe-area-inset-left,0px)) 120px}
+
+header{padding:74px 0 0}
+h1{font-family:var(--serif); font-weight:700; font-size:clamp(2.2rem,5vw,2.9rem);
+  line-height:1.14; letter-spacing:-.015em; margin:0 0 24px; max-width:17ch}
+.intro{font-size:1.16rem; color:var(--ink-2); margin:0 0 20px}
+
+h2{font-family:var(--serif); font-weight:700; font-size:1.52rem; line-height:1.26;
+  letter-spacing:-.01em; margin:0 0 16px}
+h3{font-family:var(--serif); font-weight:600; font-size:1.16rem; margin:38px 0 10px}
+p{margin:0 0 18px}
+a{color:var(--accent); text-underline-offset:3px}
+strong{font-weight:600}
+em{font-style:italic}
+ul{margin:0 0 18px; padding-left:1.3em}
+li{margin-bottom:10px}
+li::marker{color:var(--ink-3)}
+
+section{padding:54px 0 0; border-top:1px solid var(--hair); margin-top:54px}
+section:first-of-type{border-top:none; margin-top:0}
+
+/* the link, the one framed thing on the page */
+.link{margin:34px 0 0; padding:22px 24px; background:var(--quiet); border:1px solid var(--hair)}
+.link .lbl{font-family:var(--sans); font-size:13px; font-weight:600; color:var(--ink-3); margin:0 0 12px}
+.linkrow{display:flex; gap:12px; align-items:stretch; flex-wrap:wrap}
+code.url{flex:1 1 300px; min-width:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:.74rem; line-height:1.6; background:var(--paper); border:1px solid var(--hair-2);
+  padding:11px 13px; overflow-wrap:anywhere; color:var(--ink)}
+button{font-family:var(--sans); font-size:15px; font-weight:600; cursor:pointer;
+  background:var(--accent); color:#fff; border:none; padding:0 20px; min-height:44px; white-space:nowrap}
+button:hover{background:#114A4F}
+button:focus-visible{outline:2px solid var(--accent); outline-offset:3px}
+.link .after{font-family:var(--sans); font-size:14.5px; line-height:1.6; color:var(--ink-2);
+  margin:14px 0 0}
+
+ol.steps{counter-reset:s; list-style:none; margin:0; padding:0}
+ol.steps li{counter-increment:s; position:relative; padding:0 0 22px 40px; margin:0}
+ol.steps li::before{content:counter(s) "."; position:absolute; left:0; top:0;
+  font-family:var(--sans); font-size:15px; font-weight:600; color:var(--accent)}
+ol.steps p{margin:0 0 6px}
+ol.steps .aside{font-family:var(--sans); font-size:15px; color:var(--ink-3); line-height:1.6}
+
+.examples{margin:0 0 18px; padding:0; list-style:none}
+.examples li{padding:11px 0; border-bottom:1px solid var(--hair); margin:0;
+  font-size:1.02rem; color:var(--ink)}
+.examples li:first-child{border-top:1px solid var(--hair)}
+
+figure{margin:30px 0 26px}
+figure svg{display:block; width:100%; height:auto}
+figcaption{font-family:var(--sans); font-size:14.5px; color:var(--ink-3); margin-top:12px; line-height:1.6}
+
+dl.plain{margin:0 0 18px}
+dl.plain dt{font-weight:600; margin-top:20px}
+dl.plain dd{margin:4px 0 0; color:var(--ink-2)}
+
+table{border-collapse:collapse; width:100%; font-size:1rem; margin:0 0 18px}
+th,td{text-align:left; padding:12px 14px 12px 0; border-bottom:1px solid var(--hair);
+  vertical-align:top}
+th{font-family:var(--sans); font-size:13px; font-weight:600; color:var(--ink-3);
+  text-transform:none; letter-spacing:0}
+td:first-child{padding-right:26px}
+.tw{overflow-x:auto}
+
+.aside-note{margin:26px 0; padding:0 0 0 20px; border-left:2px solid var(--hair-2);
+  color:var(--ink-2); font-size:1rem}
+.aside-note strong{color:var(--ink)}
+.aside-note p:last-child{margin-bottom:0}
+
+footer{margin-top:62px; padding-top:22px; border-top:1px solid var(--hair);
+  font-family:var(--sans); font-size:14.5px; color:var(--ink-3); line-height:1.65}
+footer a{color:var(--ink-3)}
+
+@media (max-width:620px){
+  body{font-size:17.5px}
+  header{padding:42px 0 0}
+  section{padding:40px 0 0; margin-top:40px}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<div class="bar"><div class="bar-in">
+  <span class="mark">SEO Connector</span>
+  <nav>
+    <a href="#setup">Set up</a>
+    <a href="#asking">Asking</a>
+    <a href="#numbers">The numbers</a>
+    <a href="#problems">Problems</a>
+  </nav>
+</div></div>
+
+<div class="page">
+
+<header>
+  <h1>Ask questions about our website traffic</h1>
+  <p class="intro">This connects Claude, ChatGPT or Cursor to Google Search Console and Google
+  Analytics for stgconsulting.com. Once it is set up you can ask, in ordinary English, what people
+  search for to find us, which pages are growing and which are slipping.</p>
+  <p class="intro">You do not need a Google account, you do not need to install anything, and you
+  cannot break the website with it.</p>
+
+  <div class="link">
+    <p class="lbl">Your link</p>
+    <div class="linkrow">
+      <code class="url" id="url">https://mcp.stgconsulting.com/mcp/__ENDPOINT_PATH__</code>
+      <button id="copy" type="button">Copy</button>
+    </div>
+    <p class="after" id="after">Treat this like a password. Please keep it out of shared documents,
+    tickets, public channels and screenshots. If it does get out, it can be replaced in a minute.</p>
+  </div>
+
+  <div class="link">
+    <p class="lbl">Your key</p>
+    <p class="after">You also need a personal key, which was sent to you separately. It is not
+    printed here, because everyone has their own — that way one person's key can be withdrawn
+    without disturbing anybody else. Keep it with the same care as the link.</p>
+  </div>
+</header>
+
+<section id="setup">
+  <h2>Setting it up</h2>
+  <p>About a minute, and only once for each app you use.</p>
+
+  <h3>In Claude</h3>
+  <ol class="steps">
+    <li>
+      <p>Open <strong>Settings</strong>, then <strong>Connectors</strong>.</p>
+      <p class="aside">In the desktop app this sits under the Claude menu. On the website it is
+      behind your name in the bottom-left corner.</p>
+    </li>
+    <li><p>Choose <strong>Add custom connector</strong>.</p></li>
+    <li>
+      <p>Paste the link from the top of this page.</p>
+      <p class="aside">Use the Copy button so you do not lose a character.</p>
+    </li>
+    <li>
+      <p>Open <strong>Request headers</strong> and add one. Name it
+      <code>authorization</code>. For the value, type the word <strong>Bearer</strong>, then a
+      space, then your personal key.</p>
+      <p class="aside">So the value reads <code>Bearer</code> followed by your key. The word and
+      the space both matter — without them the key is not recognised. If you do not see a Request
+      headers section, choose <strong>No sign in</strong> first and it will appear.</p>
+    </li>
+    <li>
+      <p>Save, then ask your first question.</p>
+      <p class="aside">An entry called <em>seo</em> appears. The first time you ask something,
+      Claude will check that it is allowed to use it — choose <strong>Allow for this chat</strong>.</p>
+    </li>
+  </ol>
+
+  <h3>In other apps</h3>
+  <p>ChatGPT, Cursor, Windsurf and Cline all accept the same link and the same key. Look for
+  “custom connector”, “remote MCP server” or “add integration” in their settings, and for a
+  place to add a header or an authorisation token.</p>
+
+  <div class="aside-note">
+    <p>Ask in an ordinary chat. If you are in a Cowork or Code session and it reports the connector
+    as offline, that is a quirk of those session types rather than a fault. Start a normal chat and
+    it will be there.</p>
+  </div>
+</section>
+
+<section id="asking">
+  <h2>Asking it things</h2>
+  <p>Just ask. You never have to name the website or paste any kind of identifier — it already
+  knows which site it is looking at.</p>
+
+  <ul class="examples">
+    <li>Which pages lost the most visitors in the last 28 days compared with the 28 before?</li>
+    <li>What are our top 20 search terms this month, and where do we rank for each?</li>
+    <li>Which pages show up high in Google but hardly get clicked?</li>
+    <li>How is our fractional CTO page doing?</li>
+    <li>Has Google indexed this page yet?</li>
+    <li>Write a short summary of last month's search performance for the team.</li>
+  </ul>
+
+  <p>Follow-up questions work normally. Ask it to look closer at one page, change the dates, or
+  put the answer in a table.</p>
+
+  <h3>What it can find out</h3>
+  <table>
+    <tbody>
+      <tr><td>Searches and rankings</td><td>How many people searched, how many clicked, and where
+        we appeared — broken down by search term, page, country, device or day</td></tr>
+      <tr><td>What changed</td><td>Two periods compared, with the pages that rose and fell most</td></tr>
+      <tr><td>One page in full</td><td>Its traffic over time, the searches that find it, how people
+        behave once they land, and whether Google has indexed it</td></tr>
+      <tr><td>Indexing</td><td>Whether a page is in Google, when it was last looked at, and any
+        problems with our sitemaps</td></tr>
+      <tr><td>Visitor behaviour</td><td>Visits, sources, engagement, conversions and revenue from
+        Analytics</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="numbers">
+  <h2>Reading the numbers</h2>
+  <p>Three things that will otherwise catch you out. The connector mentions all of them in its
+  answers, but they are easy to skim past.</p>
+
+  <h3>A list of search terms never adds up to the total</h3>
+  <figure>
+    <svg viewBox="0 0 680 150" role="img" aria-label="A bar representing 1,000 total clicks, beneath it a shorter bar of 720 clicks accounted for by listed search terms, with 280 clicks hidden">
+      <text x="0" y="18" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#555C5C">The site's real total</text>
+      <line x1="0" y1="34" x2="600" y2="34" stroke="#16595F" stroke-width="7" stroke-linecap="butt"/>
+      <text x="612" y="39" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#1A1D1D">1,000</text>
+
+      <text x="0" y="82" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#555C5C">What a list of search terms shows</text>
+      <line x1="0" y1="98" x2="432" y2="98" stroke="#16595F" stroke-width="7" stroke-linecap="butt" opacity="0.42"/>
+      <line x1="432" y1="98" x2="600" y2="98" stroke="#CFD3D2" stroke-width="7" stroke-dasharray="3 5"/>
+      <text x="612" y="103" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#1A1D1D">720</text>
+      <text x="438" y="126" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191">280 hidden</text>
+    </svg>
+    <figcaption>Google hides search terms that very few people used, so the parts always come to
+    less than the whole.</figcaption>
+  </figure>
+  <p>This matters more than it sounds. Never work out a percentage from a list of search terms —
+  “40% of our traffic comes from X”, calculated that way, will be wrong. Totals by <em>page</em>
+  are unaffected; it is only search terms that are hidden.</p>
+
+  <h3>Google's figures run two to three days behind</h3>
+  <figure>
+    <svg viewBox="0 0 680 108" role="img" aria-label="A timeline where everything up to three days ago is settled and the final stretch before today is still incomplete">
+      <line x1="0" y1="44" x2="520" y2="44" stroke="#16595F" stroke-width="5"/>
+      <line x1="520" y1="44" x2="648" y2="44" stroke="#CFD3D2" stroke-width="5" stroke-dasharray="4 5"/>
+      <line x1="648" y1="28" x2="648" y2="60" stroke="#1A1D1D" stroke-width="1.5"/>
+      <text x="0" y="24" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#555C5C">settled — safe to rely on</text>
+      <text x="520" y="80" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191">still arriving</text>
+      <text x="624" y="24" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#1A1D1D">today</text>
+    </svg>
+  </figure>
+  <p>Ask about yesterday and you will often see nothing, or a number that later goes up. That is
+  normal. Every answer states the exact dates it used, so check that line whenever a figure looks
+  surprising. Search Console keeps roughly 16 months of history, so comparisons with two years ago
+  are not possible.</p>
+
+  <h3>Analytics and Search Console count different things</h3>
+  <p>Search Console counts clicks that came from Google. Analytics counts visits from everywhere,
+  in our own timezone. The two will never match exactly, and that is expected rather than a fault.</p>
+
+  <h3>What the four main figures mean</h3>
+  <figure>
+    <svg viewBox="0 0 680 196" role="img" aria-label="One thousand impressions lead to forty-five clicks, a click-through rate of four and a half per cent, at an average position of four point two">
+      <text x="0" y="20" font-family="'Source Sans 3',sans-serif" font-size="15" font-weight="600" fill="#1A1D1D">Impressions</text>
+      <text x="0" y="42" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#8A9191">our page appeared in someone's results</text>
+      <text x="600" y="30" text-anchor="end" font-family="'Source Serif 4',serif" font-size="25" fill="#16595F">1,000</text>
+      <line x1="0" y1="62" x2="640" y2="62" stroke="#E4E6E5"/>
+
+      <text x="0" y="90" font-family="'Source Sans 3',sans-serif" font-size="15" font-weight="600" fill="#1A1D1D">Clicks</text>
+      <text x="0" y="112" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#8A9191">somebody actually came to the site</text>
+      <text x="600" y="100" text-anchor="end" font-family="'Source Serif 4',serif" font-size="25" fill="#16595F">45</text>
+      <line x1="0" y1="132" x2="640" y2="132" stroke="#E4E6E5"/>
+
+      <text x="0" y="160" font-family="'Source Sans 3',sans-serif" font-size="15" font-weight="600" fill="#1A1D1D">Click-through rate</text>
+      <text x="0" y="182" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#8A9191">clicks divided by impressions</text>
+      <text x="600" y="170" text-anchor="end" font-family="'Source Serif 4',serif" font-size="25" fill="#16595F">4.5%</text>
+    </svg>
+    <figcaption>Illustrative figures, not ours. The fourth is <strong>position</strong> — our
+    average place in the results, where 1 is the top and anything above 10 is page two.</figcaption>
+  </figure>
+  <p>A page with many impressions and very few clicks is usually a title problem rather than a
+  ranking problem: Google is already showing it to people, and they are choosing something else.</p>
+</section>
+
+<section id="problems">
+  <h2>If something looks wrong</h2>
+  <div class="tw">
+  <table>
+    <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td>It says the server refused the request, or mentions 401</td><td>The key is missing or mistyped. Check the value begins with <code>Bearer</code> and a space, and that the whole key followed</td></tr>
+      <tr><td>It says it has no access to our website</td><td>Pass it on — a permission needs renewing</td></tr>
+      <tr><td>The connector does not appear</td><td>Check the whole link was pasted, including the long code at the end, then restart the app</td></tr>
+      <tr><td>It reports the connector as offline</td><td>Use an ordinary chat rather than a Cowork or Code session</td></tr>
+      <tr><td>It stops partway through an answer</td><td>Ask again. If it keeps happening, pass it on</td></tr>
+      <tr><td>The numbers look impossibly low</td><td>Check the dates in the answer — anything in the last three days is incomplete</td></tr>
+      <tr><td>Anything else</td><td>Ask your app to “run auth_status and tell me what it says”, then send that on</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>One thing worth knowing</h3>
+  <p>Everyone shares one allowance from Google. The only limit you could realistically reach is on
+  “is this page indexed?” questions — about two thousand a day across the whole team. Asking about
+  hundreds of pages in one sitting could use it up for everyone. Everything else has far more room
+  than we will ever need.</p>
+</section>
+
+<footer>
+  <p>Read-only by design. The connector can look at Search Console and Analytics and nothing else —
+  it has no ability to change the website, and the part of it that could was switched off before
+  anyone was given the link.</p>
+  <p>Maintaining the server? The technical notes are at <a href="/docs/admin/">/docs/admin</a>.</p>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById('copy'),
+      url = document.getElementById('url'),
+      after = document.getElementById('after');
+  if (!btn || !url) return;
+  var original = after ? after.textContent : '', timer;
+  function say(m) {
+    if (!after) return;
+    after.textContent = m;
+    clearTimeout(timer);
+    timer = setTimeout(function () { after.textContent = original; }, 5000);
+  }
+  function select() {
+    try {
+      var r = document.createRange(); r.selectNodeContents(url);
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      say('Selected — now press Cmd+C on a Mac, or Ctrl+C on Windows.');
+    } catch (e) { say('Select the link above and copy it by hand.'); }
+  }
+  btn.addEventListener('click', function () {
+    var t = url.textContent.trim();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () {
+        btn.textContent = 'Copied';
+        say('Copied. Please keep it out of shared documents and channels.');
+        setTimeout(function () { btn.textContent = 'Copy'; }, 2500);
+      }, select);
+    } else { select(); }
+  });
+})();
+</script>
+</body>
+</html>
