@@ -126,6 +126,10 @@ dl.pair dd{margin:0; color:var(--ink)}
 
 @media (max-width:620px){
   body{font-size:17.5px}
+  /* A 680-unit diagram squeezed into a phone renders its labels at about 7px. Let it
+     keep a legible size and scroll inside its own box, exactly as .tw does for tables. */
+  figure{overflow-x:auto}
+  figure svg{min-width:560px}
   header{padding:42px 0 0}
   section{padding:40px 0 0; margin-top:40px}
 }
@@ -138,6 +142,7 @@ dl.pair dd{margin:0; color:var(--ink)}
   <span class="mark">SEO Connector</span>
   <nav>
     <a href="#setup">Set up</a>
+    <a href="#sources">Connected</a>
     <a href="#asking">Asking</a>
     <a href="#numbers">The numbers</a>
     <a href="#problems">Problems</a>
@@ -217,6 +222,95 @@ dl.pair dd{margin:0; color:var(--ink)}
   </div>
 </section>
 
+<section id="sources">
+  <h2>What it is connected to</h2>
+  <p>Three places, read directly. Nothing is copied into a spreadsheet first, so an answer
+  is whatever those three say at the moment you ask.</p>
+
+  <figure>
+    <svg viewBox="0 0 680 206" role="img" aria-label="Search Console, Analytics and Mailchimp converging on a single page of the website, showing that the three can be asked about together">
+      <text x="0" y="44" font-family="'Source Sans 3',sans-serif" font-size="15" font-weight="600" fill="#1A1D1D">Search Console</text>
+      <text x="0" y="64" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191">what people search for</text>
+      <line x1="215" y1="39" x2="348" y2="99" stroke="#CFD3D2" stroke-width="2" stroke-linecap="butt"/>
+      <text x="0" y="104" font-family="'Source Sans 3',sans-serif" font-size="15" font-weight="600" fill="#1A1D1D">Analytics</text>
+      <text x="0" y="124" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191">what visitors do here</text>
+      <line x1="215" y1="99" x2="348" y2="99" stroke="#CFD3D2" stroke-width="2" stroke-linecap="butt"/>
+      <text x="0" y="164" font-family="'Source Sans 3',sans-serif" font-size="15" font-weight="600" fill="#1A1D1D">Mailchimp</text>
+      <text x="0" y="184" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191">what we sent by email</text>
+      <line x1="215" y1="159" x2="348" y2="99" stroke="#CFD3D2" stroke-width="2" stroke-linecap="butt"/>
+      <line x1="348" y1="99" x2="424" y2="99" stroke="#16595F" stroke-width="2" stroke-linecap="butt"/>
+      <polyline points="416,93 424,99 416,105" fill="none" stroke="#16595F" stroke-width="2"/>
+      <text x="444" y="88" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191">one page on the site</text>
+      <text x="444" y="112" font-family="ui-monospace,Menlo,monospace" font-size="13" fill="#1A1D1D">/services/fractional-cto</text>
+      <line x1="444" y1="124" x2="660" y2="124" stroke="#16595F" stroke-width="2" stroke-linecap="butt"/>
+      <text x="444" y="148" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191">asked about as one thing</text>
+    </svg>
+    <figcaption>The arrow is the useful part. All three describe the same pages of the site,
+    so one question can cross them — which is the thing three separate logins cannot do.</figcaption>
+  </figure>
+
+  <dl class="plain">
+    <div><dt>Search Console</dt><dd>What people typed into Google, how often we appeared, how
+    often they clicked, and where we ranked. Also whether a page is in Google at all.</dd></div>
+    <div><dt>Analytics</dt><dd>What visitors did once they arrived — the page they landed on,
+    how engaged they were, and what they went on to do.</dd></div>
+    <div><dt>Mailchimp</dt><dd>Every campaign we have sent, who opened and clicked, who
+    unsubscribed, and which links in a message got the clicks.</dd></div>
+  </dl>
+
+  <h3>What you can ask</h3>
+  <figure>
+    <svg viewBox="0 0 680 300" role="img" aria-label="A grid of question types against the three sources, showing that most questions draw on one source while a question about a single page draws on all three">
+      <text x="452" y="26" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191" text-anchor="middle">Search</text>
+      <text x="542" y="26" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191" text-anchor="middle">Visits</text>
+      <text x="632" y="26" font-family="'Source Sans 3',sans-serif" font-size="13" fill="#8A9191" text-anchor="middle">Email</text>
+      <line x1="0" y1="40" x2="680" y2="40" stroke="#CFD3D2" stroke-width="1"/>
+      <text x="0" y="75" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#1A1D1D">What people search to find us</text>
+      <rect x="447" y="65" width="10" height="10" fill="#16595F"/>
+      <rect x="537.5" y="65.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <rect x="627.5" y="65.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <line x1="0" y1="87" x2="680" y2="87" stroke="#E4E6E5" stroke-width="1"/>
+      <text x="0" y="109" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#1A1D1D">Where we rank, and what gets clicked</text>
+      <rect x="447" y="99" width="10" height="10" fill="#16595F"/>
+      <rect x="537.5" y="99.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <rect x="627.5" y="99.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <line x1="0" y1="121" x2="680" y2="121" stroke="#E4E6E5" stroke-width="1"/>
+      <text x="0" y="143" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#1A1D1D">What changed between two periods</text>
+      <rect x="447" y="133" width="10" height="10" fill="#16595F"/>
+      <rect x="537" y="133" width="10" height="10" fill="#16595F"/>
+      <rect x="627.5" y="133.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <line x1="0" y1="155" x2="680" y2="155" stroke="#E4E6E5" stroke-width="1"/>
+      <text x="0" y="177" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#1A1D1D">What visitors do once they arrive</text>
+      <rect x="447.5" y="167.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <rect x="537" y="167" width="10" height="10" fill="#16595F"/>
+      <rect x="627.5" y="167.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <line x1="0" y1="189" x2="680" y2="189" stroke="#E4E6E5" stroke-width="1"/>
+      <text x="0" y="211" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#1A1D1D">Whether Google has indexed a page</text>
+      <rect x="447" y="201" width="10" height="10" fill="#16595F"/>
+      <rect x="537.5" y="201.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <rect x="627.5" y="201.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <line x1="0" y1="223" x2="680" y2="223" stroke="#E4E6E5" stroke-width="1"/>
+      <text x="0" y="245" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#1A1D1D">How a campaign landed, and what was clicked</text>
+      <rect x="447.5" y="235.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <rect x="537.5" y="235.5" width="9" height="9" fill="none" stroke="#CFD3D2" stroke-width="1.5"/>
+      <rect x="627" y="235" width="10" height="10" fill="#16595F"/>
+      <line x1="0" y1="257" x2="680" y2="257" stroke="#E4E6E5" stroke-width="1"/>
+      <text x="0" y="279" font-family="'Source Sans 3',sans-serif" font-size="14" fill="#1A1D1D">One page, end to end</text>
+      <rect x="447" y="269" width="10" height="10" fill="#16595F"/>
+      <rect x="537" y="269" width="10" height="10" fill="#16595F"/>
+      <rect x="627" y="269" width="10" height="10" fill="#16595F"/>
+    </svg>
+    <figcaption>Most questions need one source. The ones that are hard to answer any other
+    way need several.</figcaption>
+  </figure>
+
+  <ul class="examples">
+    <li>This campaign sent people to a page — how does that compare with its search traffic?</li>
+    <li>Which pages get email traffic but almost nothing from Google?</li>
+    <li>We emailed about a service last month. Did searches for it go up afterwards?</li>
+  </ul>
+</section>
+
 <section id="asking">
   <h2>Asking it things</h2>
   <p>Just ask. You never have to name the website or paste any kind of identifier — it already
@@ -236,22 +330,6 @@ dl.pair dd{margin:0; color:var(--ink)}
   <p>Follow-up questions work normally. Ask it to look closer at one page, change the dates, or
   put the answer in a table.</p>
 
-  <h3>What it can find out</h3>
-  <table>
-    <tbody>
-      <tr><td>Searches and rankings</td><td>How many people searched, how many clicked, and where
-        we appeared — broken down by search term, page, country, device or day</td></tr>
-      <tr><td>What changed</td><td>Two periods compared, with the pages that rose and fell most</td></tr>
-      <tr><td>One page in full</td><td>Its traffic over time, the searches that find it, how people
-        behave once they land, and whether Google has indexed it</td></tr>
-      <tr><td>Indexing</td><td>Whether a page is in Google, when it was last looked at, and any
-        problems with our sitemaps</td></tr>
-      <tr><td>Visitor behaviour</td><td>Visits, sources, engagement, conversions and revenue from
-        Analytics</td></tr>
-      <tr><td>Email campaigns</td><td>What we sent and when, how many opened and clicked, who
-        unsubscribed, and which links in a campaign got the clicks</td></tr>
-    </tbody>
-  </table>
 </section>
 
 <section id="numbers">
