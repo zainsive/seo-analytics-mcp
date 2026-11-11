@@ -26,11 +26,13 @@ brought up from the environment.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import logging
 import os
 import secrets
 from collections.abc import Callable
+from typing import NamedTuple
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -101,33 +103,52 @@ def identify_env(presented: str, tokens: dict[str, str]) -> str | None:
     return match
 
 
-def credential(headers) -> tuple[str | None, str | None]:
-    """Pull the token out of whichever accepted header carries it.
+class Credential(NamedTuple):
+    """What arrived. `token` and `problem` are mutually exclusive; both unset means
+    nothing was presented at all. `header` names where it was found, for the log."""
 
-    Returns (token, problem); exactly one is set. A problem is a sentence for the 401
-    body, so a misconfigured client gets told what is wrong rather than just "no".
+    token: str | None = None
+    problem: str | None = None
+    header: str | None = None
+
+
+def fingerprint(token: str) -> str:
+    """A short, non-reversible label for a token, safe to write to a log.
+
+    Comparing this against the same value in `token list` settles whether the client is
+    sending the token that was issued. Without it, diagnosing a rejection means asking
+    somebody to paste their credential into a chat window.
     """
+    return hashlib.sha256(token.encode()).hexdigest()[:8]
+
+
+def credential(headers) -> Credential:
+    """Pull the token out of whichever accepted header carries it."""
     for name in HEADER_NAMES:
         raw = (headers.get(name) or "").strip()
         if not raw:
             continue
+        empty_bearer = f"The {name} header says 'Bearer' but carries no token after it."
         scheme, sep, rest = raw.partition(" ")
         if not sep:
             if raw.lower() == "bearer":
                 # Stripping "Bearer " leaves "Bearer", which would otherwise be taken
                 # for a bare key and fail with the unhelpful "not recognised".
-                return None, f"The {name} header says 'Bearer' but carries no token after it."
-            return raw, None  # a bare key, as x-api-key conventionally carries it
+                return Credential(problem=empty_bearer, header=name)
+            return Credential(token=raw, header=name)  # bare key, as x-api-key carries it
         if scheme.lower() == "bearer":
             token = rest.strip()
             if token:
-                return token, None
-            return None, f"The {name} header says 'Bearer' but carries no token after it."
-        return None, (
-            f"The {name} header uses the {scheme!r} scheme, which this server does not "
-            "accept. Send the token on its own, or prefixed with 'Bearer '."
+                return Credential(token=token, header=name)
+            return Credential(problem=empty_bearer, header=name)
+        return Credential(
+            problem=(
+                f"The {name} header uses the {scheme!r} scheme, which this server does not "
+                "accept. Send the token on its own, or prefixed with 'Bearer '."
+            ),
+            header=name,
         )
-    return None, None  # nothing was presented at all
+    return Credential()  # nothing was presented at all
 
 
 def _unauthorised(detail: str) -> JSONResponse:
@@ -150,23 +171,31 @@ def make_middleware(resolve: Callable[[str], str | None]):
         if request.url.path in OPEN_PATHS:
             return await call_next(request)
 
-        presented, problem = credential(request.headers)
+        got = credential(request.headers)
         peer = request.client.host if request.client else "?"
         client = request.headers.get("x-forwarded-for", peer)
 
-        if problem:
-            logger.warning("401 malformed credential from %s", client)
-            return _unauthorised(problem)
-        if not presented:
+        if got.problem:
+            logger.warning("401 malformed credential in %s from %s", got.header, client)
+            return _unauthorised(got.problem)
+        if not got.token:
             logger.warning("401 no credentials from %s %s", client, request.url.path)
             return _unauthorised(
                 "This server requires an access token. Send it in an "
                 f"'{PRIMARY_HEADER}' header with every request."
             )
 
-        label = resolve(presented)
+        label = resolve(got.token)
         if label is None:
-            logger.warning("401 unrecognised token from %s", client)
+            # Length and fingerprint, never the value: enough to tell a truncated paste
+            # from a stale token by comparing against `seo-analytics-mcp token list`.
+            logger.warning(
+                "401 unrecognised token from %s: header %s, %d chars, fingerprint %s",
+                client,
+                got.header,
+                len(got.token),
+                fingerprint(got.token),
+            )
             return _unauthorised("That token is not recognised. Ask for a current one.")
 
         request.state.token_label = label

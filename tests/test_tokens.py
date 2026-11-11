@@ -431,6 +431,40 @@ def test_the_documented_name_is_the_first_one_tried():
 
 
 def test_credential_reports_nothing_presented_distinctly_from_a_problem():
-    assert bearer.credential({}) == (None, None)
-    token, problem = bearer.credential({"x-api-key": "abc"})
-    assert (token, problem) == ("abc", None)
+    nothing = bearer.credential({})
+    assert nothing.token is None and nothing.problem is None and nothing.header is None
+    got = bearer.credential({"x-api-key": "abc"})
+    assert (got.token, got.problem, got.header) == ("abc", None, "x-api-key")
+
+
+def test_the_header_a_credential_arrived_in_is_reported_for_the_log():
+    """So a rejection says which of the accepted names the client actually used."""
+    assert bearer.credential({"apikey": "abc"}).header == "apikey"
+    assert bearer.credential({"authorization": "Bearer abc"}).header == "authorization"
+    assert bearer.credential({"x-api-key": "Basic abc"}).header == "x-api-key"
+
+
+def test_a_fingerprint_identifies_a_token_without_revealing_it():
+    token = "a-perfectly-ordinary-looking-token"
+    fp = bearer.fingerprint(token)
+    assert len(fp) == 8
+    assert fp not in token and token not in fp
+    assert bearer.fingerprint(token) == fp  # stable
+    assert bearer.fingerprint(token + "x") != fp  # and sensitive to a single character
+
+
+def test_the_fingerprint_matches_the_one_the_store_lists(db):
+    """The two must agree, or comparing a log line against `token list` proves nothing."""
+    token = store.mint("alice", path=db)
+    assert store.rows(path=db)[0]["fingerprint"] == bearer.fingerprint(token)
+
+
+def test_a_rejected_token_is_logged_by_fingerprint_and_length_never_by_value(gated, caplog):
+    client, _ = gated
+    wrong = "wrong-token-that-should-never-appear-in-a-log"
+    with caplog.at_level("WARNING"):
+        assert client.get("/mcp", headers={"x-api-key": wrong}).status_code == 401
+    assert wrong not in caplog.text
+    assert bearer.fingerprint(wrong) in caplog.text
+    assert f"{len(wrong)} chars" in caplog.text
+    assert "x-api-key" in caplog.text

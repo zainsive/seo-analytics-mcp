@@ -386,12 +386,15 @@ def cmd_token_list(args: argparse.Namespace) -> int:
         _out(f"No tokens issued yet ({store.db_path()}).")
         _out("Issue one per person:  seo-analytics-mcp token mint alice")
         return 0
-    _out(f"{'ID':>3}  {'LABEL':<18} {'STATE':<8} {'CREATED':<11} {'EXPIRES':<11} LAST USED")
+    _out(
+        f"{'ID':>3}  {'LABEL':<16} {'FINGERPRINT':<12} {'STATE':<8} "
+        f"{'CREATED':<11} {'EXPIRES':<11} LAST USED"
+    )
     for row in found:
         if args.all or row["state"] == "active":
             _out(
-                f"{row['id']:>3}  {row['label'][:18]:<18} {row['state']:<8} "
-                f"{row['created']:<11} {(row['expires'] or '-'):<11} "
+                f"{row['id']:>3}  {row['label'][:16]:<16} {row['fingerprint']:<12} "
+                f"{row['state']:<8} {row['created']:<11} {(row['expires'] or '-'):<11} "
                 f"{row['last_used'] or 'never'}"
             )
     hidden = sum(1 for r in found if r["state"] != "active")
@@ -401,6 +404,9 @@ def cmd_token_list(args: argparse.Namespace) -> int:
     _out("")
     _out("'last used' is recorded at minute granularity, so read it as 'active around")
     _out("then' rather than as an exact time.")
+    _out("")
+    _out("A rejected request logs the fingerprint it presented. Matching it to a row here")
+    _out("tells you whether a client is sending a stale token or a mistyped one.")
     return 0
 
 

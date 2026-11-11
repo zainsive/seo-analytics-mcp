@@ -221,6 +221,9 @@ def rows(*, path: Path | None = None) -> list[dict[str, Any]]:
         {
             "id": r["id"],
             "label": r["label"],
+            # The same 8 characters the gate logs on a rejection, so the two can be
+            # compared without anyone handling the token itself.
+            "fingerprint": (r["digest"] or "")[:8],
             "state": _state(r, now),
             "created": (r["created_at"] or "")[:10],
             "expires": (r["expires_at"] or "")[:10] or None,
