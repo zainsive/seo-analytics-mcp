@@ -148,9 +148,10 @@ dl.pair dd{margin:0; color:var(--ink)}
 
 <header>
   <h1>Ask questions about our website traffic</h1>
-  <p class="intro">This connects Claude, ChatGPT or Cursor to Google Search Console and Google
-  Analytics for stgconsulting.com. Once it is set up you can ask, in ordinary English, what people
-  search for to find us, which pages are growing and which are slipping.</p>
+  <p class="intro">This connects Claude, ChatGPT or Cursor to Google Search Console, Google
+  Analytics and Mailchimp for stgconsulting.com. Once it is set up you can ask, in ordinary
+  English, what people search for to find us, which pages are growing and which are slipping,
+  and how our email campaigns landed.</p>
   <p class="intro">You do not need a Google account, you do not need to install anything, and you
   cannot break the website with it.</p>
 
@@ -227,6 +228,8 @@ dl.pair dd{margin:0; color:var(--ink)}
     <li>Which pages show up high in Google but hardly get clicked?</li>
     <li>How is our fractional CTO page doing?</li>
     <li>Has Google indexed this page yet?</li>
+    <li>How did our last email campaign do, and which links did people click?</li>
+    <li>Which of our audiences has the best open rate?</li>
     <li>Write a short summary of last month's search performance for the team.</li>
   </ul>
 
@@ -245,6 +248,8 @@ dl.pair dd{margin:0; color:var(--ink)}
         problems with our sitemaps</td></tr>
       <tr><td>Visitor behaviour</td><td>Visits, sources, engagement, conversions and revenue from
         Analytics</td></tr>
+      <tr><td>Email campaigns</td><td>What we sent and when, how many opened and clicked, who
+        unsubscribed, and which links in a campaign got the clicks</td></tr>
     </tbody>
   </table>
 </section>
@@ -336,7 +341,11 @@ dl.pair dd{margin:0; color:var(--ink)}
   </table>
   </div>
 
-  <h3>One thing worth knowing</h3>
+  <h3>Two things worth knowing</h3>
+  <p>Email click counts are inflated. Company mail scanners open and click every link in a
+  message before anyone sees it, so a campaign can record three times as many clicks as it had
+  readers. The connector says so in its answers and points at the number that counts actual
+  people — trust that one, and treat per-link totals as a ranking rather than a tally.</p>
   <p>Everyone shares one allowance from Google. The only limit you could realistically reach is on
   “is this page indexed?” questions — about two thousand a day across the whole team. Asking about
   hundreds of pages in one sitting could use it up for everyone. Everything else has far more room

@@ -171,6 +171,7 @@ ssh stg-vps 'sudo install -m 644 /tmp/d.html /var/www/mcp-docs/index.html'</code
       <tr><td class="k">SEO_MCP_ALLOWED_HOSTS</td><td>Public hostname. Without it every proxied request returns 421</td></tr>
       <tr><td class="k">SEO_MCP_TOKEN_DB</td><td>Where per-person tokens live (<code>/opt/seo-analytics-mcp/state/tokens.db</code>). Must sit under a <code>ReadWritePaths=</code> directory, since the unit sets <code>ProtectSystem=strict</code></td></tr>
       <tr><td class="k">SEO_MCP_TOKENS</td><td>Fallback only: <code>label:token</code> pairs in plaintext, needing a restart to change. Prefer <code>token mint</code></td></tr>
+      <tr><td class="k">MAILCHIMP_API_KEY</td><td>Enables the Mailchimp tools. Its suffix (<code>-us15</code>) selects the data centre, so it must be pasted whole — the base URL is derived from it</td></tr>
       <tr><td class="k">GSC_DEFAULT_SITE</td><td>So nobody has to name the property</td></tr>
       <tr><td class="k">GA4_DEFAULT_PROPERTY</td><td>Same for GA4</td></tr>
       <tr><td class="k">SEO_MCP_EXPORTS</td><td><code>0</code> — no CSVs on a server nobody can browse</td></tr>
@@ -223,12 +224,7 @@ ssh stg-vps 'sudo install -m 644 /tmp/d.html /var/www/mcp-docs/index.html'</code
     <code>www</code> from that certificate if it is deliberately served elsewhere. This predates the
     connector and surfaced only because deploying it ran the test.</p>
   </div>
-  <div class="flag">
-    <p><strong>Mailchimp is installed but switched off.</strong> The four Mailchimp tools are
-    deployed and return an explanatory error rather than failing oddly, because
-    <code>MAILCHIMP_API_KEY</code> is not in <code>.env</code>. Add it and restart to enable them.
-    The key's suffix (<code>-us15</code>) selects the data centre, so it must be pasted whole.</p>
-  </div>
+
 </section>
 
 <footer>
