@@ -58,6 +58,7 @@ from .tools import composite as _composite  # noqa: E402,F401
 from .tools import ga4_tools as _ga4_tools  # noqa: E402,F401
 from .tools import gsc_tools as _gsc_tools  # noqa: E402,F401
 from .tools import indexnow_tools as _indexnow_tools  # noqa: E402,F401
+from .tools import linkedin_tools as _linkedin_tools  # noqa: E402,F401
 from .tools import mailchimp_tools as _mailchimp_tools  # noqa: E402,F401
 from .tools import meta_tools as _meta_tools  # noqa: E402,F401
 

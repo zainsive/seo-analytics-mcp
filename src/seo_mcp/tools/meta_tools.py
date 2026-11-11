@@ -11,7 +11,7 @@ from typing import Any
 
 from .. import config, credentials
 from ..auth import scopes, store
-from ..clients import ga4, gsc, mailchimp
+from ..clients import ga4, gsc, linkedin, mailchimp
 from ..server import mcp
 from . import _base
 
@@ -42,6 +42,7 @@ async def auth_status() -> dict[str, Any]:
                 "indexnow_host": profile.indexnow_host,
                 "indexnow_key_configured": bool(profile.indexnow_key),
                 "mailchimp_configured": bool(profile.mailchimp_key),
+                "linkedin_configured": bool(profile.linkedin_token),
             }
         ),
         "notes": [],
@@ -61,6 +62,37 @@ async def auth_status() -> dict[str, Any]:
         except Exception as exc:
             out["mailchimp"] = {
                 "reachable": False,
+                "error": f"{type(exc).__name__}: {exc}"[:220],
+            }
+
+    # LinkedIn likewise, and reported the same way: what the token EXPOSES, not merely
+    # whether it answers. A token with no admin role authenticates perfectly and can
+    # read nothing, which is the failure this probe exists to name.
+    if token := profile.linkedin_token:
+        version = profile.linkedin_version or linkedin.DEFAULT_VERSION
+        try:
+            orgs = await linkedin.list_organizations(token, version)
+            out["linkedin"] = {
+                "reachable": True,
+                "api_version": version,
+                "organizations": [{"id": o.organization_id, "name": o.name} for o in orgs],
+                "administers": len(orgs),
+            }
+            if not orgs:
+                out["linkedin"]["warning"] = (
+                    "The token is valid but administers no Page, so every statistics "
+                    "call will return nothing. Give the signing member an ADMINISTRATOR "
+                    "role on the Page in LinkedIn, then re-authorise."
+                )
+            out["notes"].append(
+                "LinkedIn access tokens expire about 60 days after they are issued and "
+                "cannot be renewed unattended. When LinkedIn tools start failing with an "
+                "authorisation error, that is almost always why."
+            )
+        except Exception as exc:
+            out["linkedin"] = {
+                "reachable": False,
+                "api_version": version,
                 "error": f"{type(exc).__name__}: {exc}"[:220],
             }
 

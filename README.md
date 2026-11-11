@@ -177,8 +177,8 @@ common issue filed against it.
 
 ## Tools
 
-Seventeen tools: fourteen map to upstream operations, two join sources, and one exists purely
-so the model can tell a confused user what to do.
+Twenty-one tools: eighteen map to upstream operations, two join sources, and one exists
+purely so the model can tell a confused user what to do.
 
 | | Tool | What it does |
 |:--|:--|:--|
@@ -197,6 +197,10 @@ so the model can tell a confused user what to do.
 | 📧 | `mailchimp_list_campaigns` | Sent campaigns newest first, with delivery and engagement |
 | 📧 | `mailchimp_campaign_report` | One campaign in full, plus the links its recipients clicked |
 | 📧 | `mailchimp_campaign_links` | Which links were clicked, most-clicked first |
+| 💼 | `linkedin_list_organizations` | Pages this token administers, with follower totals |
+| 💼 | `linkedin_share_stats` | Post impressions, clicks, reactions and engagement rate |
+| 💼 | `linkedin_follower_stats` | Followers gained, split into organic and paid |
+| 💼 | `linkedin_page_stats` | Views of the Page itself, by section |
 | 🔗 | `page_report` | One URL: GSC trend, top queries, GA4 engagement, index status |
 | 🩺 | `auth_status` | Active profile, scopes, which APIs answer, what to run next |
 
@@ -262,6 +266,9 @@ Every variable is optional. Precedence: **tool argument → environment → prof
 | `SEO_MCP_HOME` | Override the profile root directory |
 | `INDEXNOW_HOST` · `INDEXNOW_KEY` | Required only for IndexNow |
 | `MAILCHIMP_API_KEY` | Required only for the Mailchimp tools. The suffix (`-us15`) selects the data centre |
+| `LINKEDIN_ACCESS_TOKEN` | Required only for the LinkedIn tools. A member token, not an app key — see below |
+| `LINKEDIN_ORGANIZATION_ID` | Default Page, e.g. `1234567` — so prompts never name it |
+| `LINKEDIN_API_VERSION` | `YYYYMM`. LinkedIn retires versions on a rolling basis; override when it does |
 | `SEO_MCP_LOG_LEVEL` | `DEBUG` for verbose logging — always on **stderr**, never stdout |
 
 Hosted deployment only:
@@ -272,6 +279,21 @@ Hosted deployment only:
 | `SEO_MCP_ALLOWED_HOSTS` | Public hostname(s). Without it, every proxied request fails with `421 Invalid Host header` |
 | `SEO_MCP_TOKEN_DB` | Where access tokens live (default: profile root). Must be on a writable path — under `systemd` with `ProtectSystem=strict`, that means a `ReadWritePaths=` directory |
 | `SEO_MCP_TOKENS` | Fallback only: `label:token` pairs in plaintext. Prefer `token mint` |
+
+### LinkedIn is not like the others
+
+Mailchimp and the Google APIs authenticate a *machine*. LinkedIn does not: statistics
+come back only for Pages the signing **member** administers, so the credential is one
+person's token and it **expires after about 60 days** with no unattended renewal. This
+project already abandoned a personal OAuth token once for exactly that reason, so the
+tools say so up front rather than leaving a dead deployment looking broken.
+
+To set it up: create an app at developer.linkedin.com, request the **Community
+Management API** product, give the signing member an **ADMINISTRATOR** role on the
+Page, and authorise with `r_organization_social` and `rw_organization_admin`. A token
+missing either the product or the role authenticates perfectly and reads nothing —
+`auth_status` reports which Pages it can actually see, so that case is visible rather
+than silent.
 
 ### Access tokens
 

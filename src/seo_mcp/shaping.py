@@ -42,6 +42,7 @@ _AVERAGED = frozenset(
         "unsubscribe_rate",
         "bounce_rate",
         "abuse_rate",
+        "engagement_rate",
     }
 )
 
@@ -54,7 +55,7 @@ class QueryResult:
     rows: list[dict[str, Any]]
     dimension_keys: tuple[str, ...]
     metric_keys: tuple[str, ...]
-    source: Literal["gsc", "ga4", "mailchimp"]
+    source: Literal["gsc", "ga4", "mailchimp", "linkedin"]
     total_rows: int | None = None  # upstream availability, when known
     meta: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)  # caveats travel WITH the data
@@ -112,6 +113,10 @@ _RATIOS = (
     ("click_rate", "unique_clicks", "emails_sent"),
     ("unsubscribe_rate", "unsubscribes", "emails_sent"),
     ("bounce_rate", "bounces", "emails_sent"),
+    # LinkedIn sends its own engagement figure already divided, so it is dropped at the
+    # client, which emits the summed interactions as `engagements` instead. That keeps
+    # one numerator column here rather than teaching this table about multi-column sums.
+    ("engagement_rate", "engagements", "impressions"),
 )
 _WEIGHT_KEYS = ("impressions", "sessions", "emails_sent")
 

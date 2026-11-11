@@ -90,6 +90,21 @@ class Profile:
         logged by the client."""
         return self.default("mailchimp_key", "MAILCHIMP_API_KEY")
 
+    @property
+    def linkedin_token(self) -> str | None:
+        """Never a tool argument, for the same reason as the Mailchimp key."""
+        return self.default("linkedin_token", "LINKEDIN_ACCESS_TOKEN")
+
+    @property
+    def linkedin_organization(self) -> str | None:
+        return self.default("linkedin_organization", "LINKEDIN_ORGANIZATION_ID")
+
+    @property
+    def linkedin_version(self) -> str | None:
+        """LinkedIn retires API versions on a rolling basis, so this has to be
+        changeable without a release."""
+        return self.default("linkedin_version", "LINKEDIN_API_VERSION")
+
 
 def exports_enabled() -> bool:
     """Whether a large result may spill to a CSV on disk.

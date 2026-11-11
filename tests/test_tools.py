@@ -80,6 +80,10 @@ async def test_the_whole_tool_roster_is_registered():
     is pinned here rather than counted."""
     names = {t.name for t in await mcp.list_tools()}
     assert names == {
+        "linkedin_list_organizations",
+        "linkedin_share_stats",
+        "linkedin_follower_stats",
+        "linkedin_page_stats",
         "mailchimp_list_audiences",
         "mailchimp_list_campaigns",
         "mailchimp_campaign_report",
@@ -551,23 +555,29 @@ async def test_the_readme_lists_exactly_the_tools_that_exist():
 
 
 async def test_the_readme_tool_count_matches_the_table():
+    """The prose count and the table drifted apart once already."""
     import re
     from pathlib import Path
 
-    words = {
-        "Ten": 10,
-        "Eleven": 11,
-        "Twelve": 12,
-        "Thirteen": 13,
-        "Fourteen": 14,
-        "Fifteen": 15,
-        "Sixteen": 16,
-        "Seventeen": 17,
-        "Eighteen": 18,
-        "Nineteen": 19,
-        "Twenty": 20,
-    }
+    units = "zero one two three four five six seven eight nine ten eleven twelve "
+    teens = "thirteen fourteen fifteen sixteen seventeen eighteen nineteen"
+    words = {w: i for i, w in enumerate((units + teens).split())}
+    tens = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50}
+
+    def number(text: str) -> int | None:
+        text = text.lower()
+        if text.isdigit():
+            return int(text)
+        if text in words:
+            return words[text]
+        head, _, tail = text.partition("-")  # "twenty-one"
+        if head in tens:
+            return tens[head] + (words.get(tail, 0) if tail else 0)
+        return None
+
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
-    match = re.search(r"^(\w+) tools:", readme, re.MULTILINE)
+    match = re.search(r"^([\w-]+) tools:", readme, re.MULTILINE)
     assert match, "the Tools section no longer states a count"
-    assert words[match.group(1)] == len(await mcp.list_tools())
+    stated = number(match.group(1))
+    assert stated is not None, f"cannot read {match.group(1)!r} as a number"
+    assert stated == len(await mcp.list_tools())

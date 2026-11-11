@@ -21,7 +21,7 @@ import tempfile
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-EXPECTED_TOOLS = 17
+EXPECTED_TOOLS = 21
 
 
 async def main(binary: str) -> int:
@@ -31,7 +31,7 @@ async def main(binary: str) -> int:
         for k, v in os.environ.items()
         # A developer .env or exported key would make this test the real credential
         # instead of a clean install, which is the one thing it exists to check.
-        if not k.startswith(("SEO_MCP_", "GSC_", "GA4_", "INDEXNOW_", "MAILCHIMP_"))
+        if not k.startswith(("SEO_MCP_", "GSC_", "GA4_", "INDEXNOW_", "MAILCHIMP_", "LINKEDIN_"))
     }
     env.update(
         {
