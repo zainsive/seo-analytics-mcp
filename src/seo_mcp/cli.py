@@ -423,6 +423,66 @@ def cmd_token_revoke(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_youtube_auth(args: argparse.Namespace) -> int:
+    """One browser sign-in that yields a refresh token for the hosted server.
+
+    Separate from `auth` on purpose. That command stores a token for this machine;
+    this one PRINTS values to paste into a server's environment, because the server
+    has no browser and Google forbids a service account on YouTube Analytics.
+    """
+    from .auth import flow  # imported here so the server can never reach it
+
+    profile = config.profile_named(args.profile)
+    if args.client_secret:
+        try:
+            flow.adopt_client_secret(profile, Path(args.client_secret).expanduser())
+        except Exception as exc:
+            _err(f"error: {translate(exc, Ctx(profile=profile.name))}")
+            return 2
+    if not profile.client_path.exists():
+        _out(CONSOLE_WALKTHROUGH.format(profile=profile.name))
+        return 2
+
+    requested = sorted(scopes.for_youtube())
+    _out("Requesting YouTube scopes:")
+    for scope in requested:
+        _out(f"  - {scope}  ({scopes.DESCRIPTIONS.get(scope, 'unknown scope')})")
+    _out("")
+    _out("Sign in as the account that OWNS or MANAGES the channel. Any other account")
+    _out("will authorise successfully and then read nothing.")
+
+    try:
+        creds = flow.authorise(profile, requested, port=args.port)
+    except KeyboardInterrupt:
+        _out("\nCancelled. Nothing was written.")
+        return 1
+    except Exception as exc:
+        _err(f"error: {translate(exc, Ctx(profile=profile.name))}")
+        return 2
+
+    if not creds.refresh_token:
+        _err(
+            "Google returned no refresh token, so this would stop working within the "
+            "hour. That happens when the account has already authorised this client: "
+            "remove it at https://myaccount.google.com/permissions and run this again."
+        )
+        return 2
+
+    _out("")
+    _out("Add these three lines to the server's .env, then restart it:")
+    _out("")
+    _out(f"YOUTUBE_REFRESH_TOKEN={creds.refresh_token}")
+    _out(f"YOUTUBE_OAUTH_CLIENT_ID={creds.client_id}")
+    _out(f"YOUTUBE_OAUTH_CLIENT_SECRET={creds.client_secret}")
+    _out("")
+    _out("Treat them like a password: together they read the channel's analytics.")
+    _out("")
+    _out("One thing to check before relying on this: if the OAuth app is still in")
+    _out("Testing, Google expires refresh tokens after 7 days. Publish it under")
+    _out("APIs & Services > OAuth consent screen so the token persists.")
+    return 0
+
+
 def cmd_serve_http(args: argparse.Namespace) -> int:
     """The hosted deployment: one credential, many connecting AI tools."""
     from .server import endpoint_path, serve_http
@@ -495,6 +555,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_http.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     p_http.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     p_http.set_defaults(func=cmd_serve_http)
+
+    p_yt = subs.add_parser(
+        "youtube-auth", help="sign in as the channel owner and print YouTube credentials"
+    )
+    p_yt.add_argument("--profile", default=os.environ.get("SEO_MCP_PROFILE", "default"))
+    p_yt.add_argument("--client-secret", help="path to the OAuth client secret JSON")
+    p_yt.add_argument("--port", type=int, default=0, help="loopback port for the callback")
+    p_yt.set_defaults(func=cmd_youtube_auth)
 
     p_tok = subs.add_parser("token", help="issue, list and revoke per-person access tokens")
     tok_subs = p_tok.add_subparsers(dest="token_command", metavar="{mint,list,revoke}")

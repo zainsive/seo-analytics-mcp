@@ -9,9 +9,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from .. import config, credentials
+from .. import config, credentials, youtube_auth
 from ..auth import scopes, store
-from ..clients import ga4, gsc, linkedin, mailchimp
+from ..clients import ga4, gsc, linkedin, mailchimp, youtube
 from ..server import mcp
 from . import _base
 
@@ -43,6 +43,8 @@ async def auth_status() -> dict[str, Any]:
                 "indexnow_key_configured": bool(profile.indexnow_key),
                 "mailchimp_configured": bool(profile.mailchimp_key),
                 "linkedin_configured": bool(profile.linkedin_token),
+                "youtube_key_configured": bool(profile.youtube_api_key),
+                "youtube_analytics_configured": youtube_auth.configured(),
             }
         ),
         "notes": [],
@@ -95,6 +97,58 @@ async def auth_status() -> dict[str, Any]:
                 "api_version": version,
                 "error": f"{type(exc).__name__}: {exc}"[:220],
             }
+
+    # YouTube has two credentials and either can be absent, so each is reported on its
+    # own. A key with no OAuth gives public counts and nothing else; OAuth with no key
+    # gives analytics but cannot list videos. Collapsing them into one yes/no would
+    # leave a half-configured install looking wholly broken.
+    if (key := profile.youtube_api_key) or youtube_auth.configured():
+        state: dict[str, Any] = {}
+        channel = profile.youtube_channel
+        if key and channel:
+            try:
+                info = await youtube.channel_stats(key, channel)
+                state["public"] = {
+                    "reachable": True,
+                    "channel": info.title,
+                    "subscribers": info.subscribers,
+                    "videos": info.videos,
+                }
+            except Exception as exc:
+                state["public"] = {
+                    "reachable": False,
+                    "error": f"{type(exc).__name__}: {exc}"[:220],
+                }
+        elif key:
+            state["public"] = {
+                "reachable": None,
+                "note": "An API key is set but YOUTUBE_CHANNEL_ID is not, so nothing "
+                "could be probed. Pass channel_id once, or set the default.",
+            }
+        else:
+            state["public"] = {
+                "reachable": False,
+                "note": "YOUTUBE_API_KEY is not set, so the public counts and the video "
+                "list are unavailable even though analytics may work.",
+            }
+
+        if youtube_auth.configured():
+            try:
+                await youtube_auth.credentials()
+                state["analytics"] = {"reachable": True}
+            except Exception as exc:
+                state["analytics"] = {
+                    "reachable": False,
+                    "error": f"{type(exc).__name__}: {exc}"[:260],
+                }
+        else:
+            state["analytics"] = {
+                "reachable": False,
+                "note": "No channel-owner sign-in is configured, so watch time, "
+                "retention and traffic sources are unavailable. Google does not permit "
+                "a service account here. Run `seo-analytics-mcp youtube-auth`.",
+            }
+        out["youtube"] = state
 
     if identity["mode"] == "user":
         out["profile_dir"] = str(profile.root)

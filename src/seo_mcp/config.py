@@ -100,6 +100,27 @@ class Profile:
         return self.default("linkedin_organization", "LINKEDIN_ORGANIZATION_ID")
 
     @property
+    def youtube_api_key(self) -> str | None:
+        """Public statistics only. Never a tool argument."""
+        return self.default("youtube_api_key", "YOUTUBE_API_KEY")
+
+    @property
+    def youtube_refresh_token(self) -> str | None:
+        return self.default("youtube_refresh_token", "YOUTUBE_REFRESH_TOKEN")
+
+    @property
+    def youtube_client_id(self) -> str | None:
+        return self.default("youtube_client_id", "YOUTUBE_OAUTH_CLIENT_ID")
+
+    @property
+    def youtube_client_secret(self) -> str | None:
+        return self.default("youtube_client_secret", "YOUTUBE_OAUTH_CLIENT_SECRET")
+
+    @property
+    def youtube_channel(self) -> str | None:
+        return self.default("youtube_channel", "YOUTUBE_CHANNEL_ID")
+
+    @property
     def linkedin_version(self) -> str | None:
         """LinkedIn retires API versions on a rolling basis, so this has to be
         changeable without a release."""

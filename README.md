@@ -177,8 +177,8 @@ common issue filed against it.
 
 ## Tools
 
-Twenty-one tools: eighteen map to upstream operations, two join sources, and one exists
-purely so the model can tell a confused user what to do.
+Twenty-five tools: twenty-two map to upstream operations, two join sources, and one
+exists purely so the model can tell a confused user what to do.
 
 | | Tool | What it does |
 |:--|:--|:--|
@@ -201,6 +201,10 @@ purely so the model can tell a confused user what to do.
 | 💼 | `linkedin_share_stats` | Post impressions, clicks, reactions and engagement rate |
 | 💼 | `linkedin_follower_stats` | Followers gained, split into organic and paid |
 | 💼 | `linkedin_page_stats` | Views of the Page itself, by section |
+| 📺 | `youtube_channel_stats` | Subscribers, lifetime views, video count |
+| 📺 | `youtube_recent_videos` | Recent uploads with public views, likes and comments |
+| 📺 | `youtube_channel_report` | Watch time, view duration and subscriber movement |
+| 📺 | `youtube_traffic_sources` | Where views came from — search, suggested, external |
 | 🔗 | `page_report` | One URL: GSC trend, top queries, GA4 engagement, index status |
 | 🩺 | `auth_status` | Active profile, scopes, which APIs answer, what to run next |
 
@@ -269,6 +273,9 @@ Every variable is optional. Precedence: **tool argument → environment → prof
 | `LINKEDIN_ACCESS_TOKEN` | Required only for the LinkedIn tools. A member token, not an app key — see below |
 | `LINKEDIN_ORGANIZATION_ID` | Default Page, e.g. `1234567` — so prompts never name it |
 | `LINKEDIN_API_VERSION` | `YYYYMM`. LinkedIn retires versions on a rolling basis; override when it does |
+| `YOUTUBE_API_KEY` | Public YouTube counts and the video list |
+| `YOUTUBE_CHANNEL_ID` | Default channel, e.g. `UCVsEgKMBL1DREac01aQf5zA` |
+| `YOUTUBE_REFRESH_TOKEN` · `YOUTUBE_OAUTH_CLIENT_ID` · `YOUTUBE_OAUTH_CLIENT_SECRET` | Owner analytics — watch time, retention, traffic sources. From `youtube-auth` |
 | `SEO_MCP_LOG_LEVEL` | `DEBUG` for verbose logging — always on **stderr**, never stdout |
 
 Hosted deployment only:
@@ -279,6 +286,29 @@ Hosted deployment only:
 | `SEO_MCP_ALLOWED_HOSTS` | Public hostname(s). Without it, every proxied request fails with `421 Invalid Host header` |
 | `SEO_MCP_TOKEN_DB` | Where access tokens live (default: profile root). Must be on a writable path — under `systemd` with `ProtectSystem=strict`, that means a `ReadWritePaths=` directory |
 | `SEO_MCP_TOKENS` | Fallback only: `label:token` pairs in plaintext. Prefer `token mint` |
+
+### YouTube needs two credentials, and Google insists on it
+
+The Data API answers public questions — subscribers, views, a video's likes — from a
+plain API key. The Analytics API answers the questions worth asking — watch time,
+average view duration, where the views came from — and **cannot use a service account
+at all**: Google's own documentation states a service account cannot be linked to a
+YouTube channel, so requests authorised that way simply error.
+
+So YouTube carries its own OAuth credential, separate from whatever else the server is
+authenticated as, because `credentials.mode()` is a single switch and a service account
+would otherwise claim YouTube too.
+
+```bash
+seo-analytics-mcp youtube-auth      # sign in as the channel OWNER; prints three values
+```
+
+Paste those into the server's environment. **Publish the OAuth app** before relying on
+it — while it is in Testing, Google expires refresh tokens after 7 days, which is the
+same seven-day problem described above.
+
+Either half works without the other. `auth_status` reports them separately, so a
+half-configured install says which half.
 
 ### LinkedIn is not like the others
 

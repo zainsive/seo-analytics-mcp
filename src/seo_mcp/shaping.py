@@ -43,6 +43,9 @@ _AVERAGED = frozenset(
         "bounce_rate",
         "abuse_rate",
         "engagement_rate",
+        # Seconds per view. Summing it across days would report a channel's attention
+        # span as hours; weighted by views it is exactly total seconds / total views.
+        "average_view_duration",
     }
 )
 
@@ -55,7 +58,7 @@ class QueryResult:
     rows: list[dict[str, Any]]
     dimension_keys: tuple[str, ...]
     metric_keys: tuple[str, ...]
-    source: Literal["gsc", "ga4", "mailchimp", "linkedin"]
+    source: Literal["gsc", "ga4", "mailchimp", "linkedin", "youtube"]
     total_rows: int | None = None  # upstream availability, when known
     meta: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)  # caveats travel WITH the data
@@ -118,7 +121,7 @@ _RATIOS = (
     # one numerator column here rather than teaching this table about multi-column sums.
     ("engagement_rate", "engagements", "impressions"),
 )
-_WEIGHT_KEYS = ("impressions", "sessions", "emails_sent")
+_WEIGHT_KEYS = ("impressions", "sessions", "emails_sent", "views")
 
 
 def _totals(rows: list[dict[str, Any]], metric_keys: tuple[str, ...] | list[str]) -> dict[str, Any]:
