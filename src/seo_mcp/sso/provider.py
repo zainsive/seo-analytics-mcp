@@ -268,6 +268,13 @@ def settings() -> Any:
     return AuthSettings(
         issuer_url=AnyUrl(base),
         resource_server_url=AnyUrl(base),
+        # Set explicitly, not left to the default. This server is both the
+        # authorization server and the only resource behind it, so there is no second
+        # audience a token could have been issued for and nothing for the check to
+        # catch. Saying so here means a future SDK release flipping the default cannot
+        # silently start rejecting every token, including the static ones, which carry
+        # no resource indicator at all.
+        validate_token_resource=False,
         client_registration_options=ClientRegistrationOptions(
             enabled=True, valid_scopes=[SCOPE], default_scopes=[SCOPE]
         ),
