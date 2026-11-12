@@ -50,7 +50,39 @@ def _setup_logging() -> None:
     )
 
 
-mcp = MCPServer(name="seo", version=__version__, instructions=INSTRUCTIONS, log_level=log_level())
+def _google_sign_in():
+    """(provider, settings), or (None, None) when Google sign-in is off.
+
+    Resolved at import because the SDK takes both at construction. Anything wrong with
+    the configuration leaves sign-in off and the server running on static tokens, which
+    is the failure a deployment can recover from.
+    """
+    try:
+        from .sso.provider import GoogleFederatedProvider, settings
+
+        if (cfg := settings()) is None:
+            return None, None
+        return GoogleFederatedProvider(), cfg
+    except Exception:  # pragma: no cover - import-time safety net
+        logging.getLogger("seo_mcp").exception("Google sign-in failed to load; staying off")
+        return None, None
+
+
+_SSO_PROVIDER, _SSO_SETTINGS = _google_sign_in()
+
+mcp = MCPServer(
+    name="seo",
+    version=__version__,
+    instructions=INSTRUCTIONS,
+    log_level=log_level(),
+    auth_server_provider=_SSO_PROVIDER,
+    auth=_SSO_SETTINGS,
+)
+
+
+def sign_in_enabled() -> bool:
+    return _SSO_PROVIDER is not None
+
 
 # Tool modules register themselves on import. This has to happen after `mcp` exists,
 # which is why the imports sit at the bottom of the module.
@@ -62,6 +94,61 @@ from .tools import linkedin_tools as _linkedin_tools  # noqa: E402,F401
 from .tools import mailchimp_tools as _mailchimp_tools  # noqa: E402,F401
 from .tools import meta_tools as _meta_tools  # noqa: E402,F401
 from .tools import youtube_tools as _youtube_tools  # noqa: E402,F401
+
+_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title>
+<style>
+body{{margin:0;background:#fff;color:#1A1D1D;font:400 18px/1.6 Georgia,"Times New Roman",serif;
+display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}}
+.box{{max-width:30rem}}h1{{font-size:1.5rem;margin:0 0 14px;letter-spacing:-.01em}}
+p{{margin:0 0 12px;color:#555C5C}}.m{{font:400 14px/1.6 ui-monospace,Menlo,monospace;color:#8A9191}}
+</style></head><body><div class="box"><h1>{title}</h1>{body}</div></body></html>"""
+
+
+@mcp.custom_route("/auth/google/callback", ["GET"])
+async def google_callback(request):
+    """Where Google returns the person after they sign in.
+
+    A human is watching this page, so failures are rendered here rather than bounced
+    back to the AI client, where the reason would be invisible.
+    """
+    from starlette.responses import HTMLResponse, RedirectResponse
+
+    from .sso import google as sso_google
+
+    log = logging.getLogger("seo_mcp")
+
+    def refuse(message: str, status: int = 400):
+        return HTMLResponse(
+            _PAGE.format(
+                title="Sign-in refused",
+                body=f"<p>{message}</p><p class='m'>You can close this tab.</p>",
+            ),
+            status_code=status,
+        )
+
+    if error := request.query_params.get("error"):
+        log.warning("google sign-in returned %s", error)
+        return refuse(
+            "Google did not complete the sign-in. If you chose Cancel, start again "
+            "from your AI tool."
+        )
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    if not code or not state:
+        return refuse("That link is incomplete. Start the sign-in again from your AI tool.")
+    if _SSO_PROVIDER is None:  # pragma: no cover - route only reachable when enabled
+        return refuse("Google sign-in is not enabled on this server.", status=404)
+
+    try:
+        destination = await _SSO_PROVIDER.complete_login(state, code)
+    except sso_google.SignInRefused as exc:
+        log.warning("sign-in refused: %s", exc)
+        return refuse(str(exc), status=403)
+    except Exception:
+        log.exception("sign-in failed")
+        return refuse("Something went wrong completing the sign-in. Please try again.", 500)
+    return RedirectResponse(destination, status_code=302)
 
 
 @mcp.custom_route("/healthz", ["GET"])
@@ -178,10 +265,25 @@ def serve_http(host: str = "127.0.0.1", port: int = 8080) -> None:
         )
     from starlette.middleware.base import BaseHTTPMiddleware
 
-    from .bearer import build_resolver, make_middleware
+    from .bearer import AliasHeaderMiddleware, build_resolver, make_middleware
 
-    # Refuses to start when no token exists anywhere, rather than serving openly.
-    resolve, token_summary = build_resolver()
+    if sign_in_enabled():
+        from .sso import google as sso_google
+        from .sso import store as sso_store
+
+        log.warning(
+            "Google sign-in is ON: %s may connect. Callback %s",
+            ", ".join(sso_google.allowed_domains() or sso_google.allowed_emails()),
+            sso_google.redirect_uri(),
+        )
+        log.warning(
+            "%d client(s) registered; static tokens still accepted alongside sign-in",
+            sso_store.client_count(),
+        )
+        resolve, token_summary = None, None
+    else:
+        # Refuses to start when no token exists anywhere, rather than serving openly.
+        resolve, token_summary = build_resolver()
 
     security = transport_security()
     if security is None:
@@ -197,8 +299,14 @@ def serve_http(host: str = "127.0.0.1", port: int = 8080) -> None:
     app = mcp.streamable_http_app(
         streamable_http_path=path, stateless_http=True, transport_security=security
     )
-    app.add_middleware(BaseHTTPMiddleware, dispatch=make_middleware(resolve))
-    log.warning("bearer token required on every request; %s", token_summary)
+    if sign_in_enabled():
+        # The SDK already guards the MCP endpoint, and the provider's
+        # load_access_token accepts the static tokens too. All that is missing is
+        # getting a credential sent as x-api-key into the header the SDK reads.
+        app.add_middleware(AliasHeaderMiddleware)
+    else:
+        app.add_middleware(BaseHTTPMiddleware, dispatch=make_middleware(resolve))
+        log.warning("bearer token required on every request; %s", token_summary)
     uvicorn.run(app, host=host, port=port, log_level=log_level().lower(), access_log=False)
 
 

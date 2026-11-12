@@ -483,6 +483,37 @@ def cmd_youtube_auth(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_people(args: argparse.Namespace) -> int:
+    """Who has signed in with Google, and how to cut one of them off."""
+    from .sso import store as sso
+
+    if args.revoke:
+        count = sso.revoke_person(args.revoke.lower())
+        if not count:
+            _err(f"No live sign-in found for {args.revoke!r}.")
+            return 1
+        _out(f"Revoked {count} token(s) for {args.revoke}.")
+        _out("Effective on their next request. They can sign in again unless their")
+        _out("Google account or the domain allowlist also changes.")
+        return 0
+
+    rows = sso.people()
+    if not rows:
+        _out("Nobody has signed in with Google yet.")
+        _out("Static tokens are listed separately: seo-analytics-mcp token list")
+        return 0
+    _out(f"{'EMAIL':<34} {'FIRST SEEN':<12} {'LIVE':>5}  LAST USED")
+    for row in rows:
+        _out(
+            f"{row['email'][:34]:<34} {row['first_seen']:<12} "
+            f"{row['live_tokens']:>5}  {row['last_used'] or 'never'}"
+        )
+    _out("")
+    _out("'live' counts access and refresh tokens that have not been revoked.")
+    _out("Revoke one person:  seo-analytics-mcp people --revoke <email>")
+    return 0
+
+
 def cmd_serve_http(args: argparse.Namespace) -> int:
     """The hosted deployment: one credential, many connecting AI tools."""
     from .server import endpoint_path, serve_http
@@ -555,6 +586,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_http.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     p_http.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     p_http.set_defaults(func=cmd_serve_http)
+
+    p_people = subs.add_parser("people", help="who has signed in with Google")
+    p_people.add_argument("--revoke", metavar="EMAIL", help="cut off one person's access")
+    p_people.set_defaults(func=cmd_people)
 
     p_yt = subs.add_parser(
         "youtube-auth", help="sign in as the channel owner and print YouTube credentials"

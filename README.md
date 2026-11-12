@@ -325,6 +325,38 @@ missing either the product or the role authenticates perfectly and reads nothing
 `auth_status` reports which Pages it can actually see, so that case is visible rather
 than silent.
 
+### Google sign-in (optional front door)
+
+With it on, somebody adds the connector in their AI tool, clicks through a Google
+sign-in, and is done — no key to paste, nothing for an administrator to hand out. The
+server becomes an OAuth 2.1 authorization server that never sees a password: the login
+itself is Google's, and all this does is decide whether the person Google vouched for
+is allowed in.
+
+| Variable | Purpose |
+|:--|:--|
+| `SEO_MCP_PUBLIC_URL` | This server's public address, e.g. `https://mcp.example.com` |
+| `GOOGLE_SSO_CLIENT_ID` · `GOOGLE_SSO_CLIENT_SECRET` | A Google OAuth **Web application** client |
+| `GOOGLE_SSO_ALLOWED_DOMAINS` | Who may sign in, e.g. `example.com` |
+| `GOOGLE_SSO_ALLOWED_EMAILS` | Individuals outside those domains |
+
+The redirect URI to register with Google is `<SEO_MCP_PUBLIC_URL>/auth/google/callback`.
+
+```bash
+seo-analytics-mcp people                      # who has signed in, and when
+seo-analytics-mcp people --revoke someone@example.com
+```
+
+Three things worth knowing:
+
+* **It fails closed.** Configured without a domain or email policy, sign-in stays
+  **off** rather than admitting every Google account in existence. Same for a missing
+  `SEO_MCP_PUBLIC_URL`. The server logs why and runs on static tokens.
+* **Static tokens keep working.** They are verified through the same path, so this can
+  be switched on without disconnecting anyone mid-conversation.
+* **Domain membership is checked on the `hd` claim**, not on the text after the `@`, so
+  a personal account cannot get in by looking like a company one.
+
 ### Access tokens
 
 The hosted server refuses to start unless at least one token exists — serving openly

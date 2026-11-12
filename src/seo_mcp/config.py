@@ -100,6 +100,30 @@ class Profile:
         return self.default("linkedin_organization", "LINKEDIN_ORGANIZATION_ID")
 
     @property
+    def public_url(self) -> str | None:
+        """This server's own public address. Google sign-in builds its redirect URI
+        from it, and it must match what the Google console has verbatim."""
+        return self.default("public_url", "SEO_MCP_PUBLIC_URL")
+
+    @property
+    def google_sso_client_id(self) -> str | None:
+        return self.default("google_sso_client_id", "GOOGLE_SSO_CLIENT_ID")
+
+    @property
+    def google_sso_client_secret(self) -> str | None:
+        return self.default("google_sso_client_secret", "GOOGLE_SSO_CLIENT_SECRET")
+
+    @property
+    def google_sso_domains(self) -> str | None:
+        """Comma-separated domains allowed to sign in, e.g. 'example.com'."""
+        return self.default("google_sso_domains", "GOOGLE_SSO_ALLOWED_DOMAINS")
+
+    @property
+    def google_sso_emails(self) -> str | None:
+        """Comma-separated individual addresses, for people outside those domains."""
+        return self.default("google_sso_emails", "GOOGLE_SSO_ALLOWED_EMAILS")
+
+    @property
     def youtube_api_key(self) -> str | None:
         """Public statistics only. Never a tool argument."""
         return self.default("youtube_api_key", "YOUTUBE_API_KEY")

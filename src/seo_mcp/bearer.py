@@ -32,7 +32,7 @@ import logging
 import os
 import secrets
 from collections.abc import Callable
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -248,3 +248,40 @@ def build_resolver() -> tuple[Callable[[str], str | None], str]:
             "database, where they are hashed rather than held in plaintext"
         )
     return resolve, described
+
+
+class AliasHeaderMiddleware:
+    """Copy an accepted alias header into `Authorization`, before anything else runs.
+
+    The SDK's bearer backend reads `Authorization` and nothing else, but claude.ai only
+    permits allowlisted header names and reserves `Authorization` for its own OAuth
+    token - which is why the static tokens arrive as `x-api-key` in the first place.
+    Normalising here means both schemes reach the same verifier, so turning Google
+    sign-in on does not cut off anybody still using a hand-issued token.
+
+    Pure ASGI rather than BaseHTTPMiddleware: this has to mutate the request headers,
+    and BaseHTTPMiddleware does not give a clean way to do that.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") == "http":
+            headers = list(scope.get("headers") or [])
+            present = {name.lower() for name, _ in headers}
+            if b"authorization" not in present:
+                for alias in HEADER_NAMES:
+                    if alias == "authorization":
+                        continue
+                    key = alias.encode()
+                    value = next((v for name, v in headers if name.lower() == key), None)
+                    if not value:
+                        continue
+                    raw = value.strip()
+                    if not raw.lower().startswith(b"bearer "):
+                        raw = b"Bearer " + raw
+                    headers.append((b"authorization", raw))
+                    scope = {**scope, "headers": headers}
+                    break
+        await self.app(scope, receive, send)
