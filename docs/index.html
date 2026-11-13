@@ -157,8 +157,8 @@ dl.pair dd{margin:0; color:var(--ink)}
   Analytics and Mailchimp for stgconsulting.com. Once it is set up you can ask, in ordinary
   English, what people search for to find us, which pages are growing and which are slipping,
   and how our email campaigns landed.</p>
-  <p class="intro">You do not need a Google account, you do not need to install anything, and you
-  cannot break the website with it.</p>
+  <p class="intro">You sign in with the same work Google account you use for email. There
+  is nothing to install, and you cannot break the website with it.</p>
 
   <div class="link">
     <p class="lbl">Your link</p>
@@ -166,21 +166,21 @@ dl.pair dd{margin:0; color:var(--ink)}
       <code class="url" id="url">https://mcp.stgconsulting.com/mcp/__ENDPOINT_PATH__</code>
       <button id="copy" type="button">Copy</button>
     </div>
-    <p class="lbl lbl-key">Your key</p>
-    <p class="keynote">Sent to you separately. It is not printed here because everyone has their
-    own — which is what lets one person's access be switched off without disturbing anybody
-    else.</p>
+    <p class="lbl lbl-key">Signing in</p>
+    <p class="keynote">There is no key to copy. You sign in with your
+    stgconsulting.com Google account the first time you connect, and the link above is
+    the only thing you need.</p>
 
-    <p class="after" id="after">Both work like passwords. Please keep them out of shared
-    documents, tickets, public channels and screenshots. If either gets out, it can be replaced
-    in a minute.</p>
+    <p class="after" id="after">The link still works like a password, so please keep it
+    out of shared documents, tickets, public channels and screenshots. If it does get
+    out, it can be replaced in a minute.</p>
   </div>
 </header>
 
 <section id="setup">
   <h2>Setting it up</h2>
-  <p>About a minute, and only once for each app you use. You need both things from the
-  top of this page: the link, and your key.</p>
+  <p>About a minute, and only once for each app you use. All you need is the link from
+  the top of this page.</p>
 
   <h3>In Claude</h3>
   <ol class="steps">
@@ -191,29 +191,26 @@ dl.pair dd{margin:0; color:var(--ink)}
     </li>
     <li><p>Choose <strong>Add custom connector</strong>.</p></li>
     <li>
-      <p>Paste the link from the top of this page.</p>
-      <p class="aside">Use the Copy button so you do not lose a character.</p>
+      <p>Paste the link from the top of this page, and save.</p>
+      <p class="aside">Use the Copy button so you do not lose a character. Leave every
+      other box empty.</p>
     </li>
     <li>
-      <p>Find <strong>Request headers</strong> and add one:</p>
-      <dl class="pair">
-        <dt>Name</dt><dd><code>x-api-key</code></dd>
-        <dt>Value</dt><dd>your key, on its own</dd>
-      </dl>
-      <p class="aside">Paste the key by itself — nothing before it, no quotes around it. If there
-      is no Request headers section, choose <strong>No sign in</strong> and it will appear.</p>
+      <p>Choose <strong>Connect</strong>, and sign in with your work Google account.</p>
+      <p class="aside">The same account you use for email. Claude will ask once; after
+      that it remembers.</p>
     </li>
     <li>
-      <p>Save, then ask your first question.</p>
+      <p>Ask your first question.</p>
       <p class="aside">An entry called <em>seo</em> appears. The first time you ask something,
       Claude will check that it is allowed to use it — choose <strong>Allow for this chat</strong>.</p>
     </li>
   </ol>
 
   <h3>In other apps</h3>
-  <p>ChatGPT, Cursor, Windsurf and Cline all accept the same link and the same key. Look for
-  “custom connector”, “remote MCP server” or “add integration” in their settings, and for a
-  place to add a header or an authorisation token.</p>
+  <p>ChatGPT, Cursor, Windsurf and Cline all accept the same link. Look for “custom
+  connector”, “remote MCP server” or “add integration” in their settings. Each one will
+  send you to the same Google sign-in the first time you use it.</p>
 
   <div class="aside-note">
     <p>Ask in an ordinary chat. If you are in a Cowork or Code session and it reports the connector
@@ -407,9 +404,9 @@ dl.pair dd{margin:0; color:var(--ink)}
   <table>
     <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
     <tbody>
-      <tr><td>It is refused, or mentions 401</td><td>Check the header is named <code>x-api-key</code> and holds the whole key, with nothing else in the box</td></tr>
+      <tr><td>Google says you are not permitted</td><td>You signed in with a personal account. Sign out of Google, connect again, and choose your stgconsulting.com address</td></tr>
+      <tr><td>It asks you to sign in again</td><td>Normal after a while, or on a new device. Signing in again takes a second and nothing is lost</td></tr>
       <tr><td>It says it has no access to our website</td><td>Pass it on — a permission needs renewing</td></tr>
-      <tr><td>It says the header name is not approved</td><td>Use <code>x-api-key</code>. Claude only permits certain header names, and that is the one to pick from the list</td></tr>
       <tr><td>The connector does not appear</td><td>Check the whole link was pasted, including the long code at the end, then restart the app</td></tr>
       <tr><td>It reports the connector as offline</td><td>Use an ordinary chat rather than a Cowork or Code session</td></tr>
       <tr><td>It stops partway through an answer</td><td>Ask again. If it keeps happening, pass it on</td></tr>
