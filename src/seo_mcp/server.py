@@ -197,9 +197,11 @@ DEFAULT_ENDPOINT_PATH = "/mcp"
 def endpoint_path() -> str:
     """Where the HTTP endpoint listens.
 
-    Deployed, this should be an unguessable path - it is the only thing standing
-    between a stranger with the URL and your analytics. Anything else is a config
-    error worth refusing rather than silently serving on a guessable route.
+    This used to be the access control: before there was any authentication, an
+    unguessable path was the only thing between a stranger with the URL and the
+    analytics. It is not that any more - every request needs a credential, and
+    serve_http refuses to start without one. A random path is now only a way to stay
+    out of opportunistic scans, which is worth something but is not protection.
     """
     raw = (os.environ.get(ENDPOINT_PATH_VAR) or DEFAULT_ENDPOINT_PATH).strip()
     if not raw.startswith("/"):
@@ -257,9 +259,12 @@ def serve_http(host: str = "127.0.0.1", port: int = 8080) -> None:
     log = logging.getLogger("seo_mcp")
     log.warning("serving MCP over HTTP on %s:%s%s", host, port, path)
     if path == DEFAULT_ENDPOINT_PATH:
-        log.warning(
-            "endpoint is the default %s. Set %s to a long random path before exposing "
-            "this to the internet - the path is the access control.",
+        # Informational, not a warning. It was a warning when the path was the only
+        # lock; saying so now would send an operator chasing a problem that the
+        # credential check already solves.
+        log.info(
+            "endpoint is the default %s. Every request still needs a credential; a "
+            "random path via %s additionally keeps it out of opportunistic scans.",
             DEFAULT_ENDPOINT_PATH,
             ENDPOINT_PATH_VAR,
         )

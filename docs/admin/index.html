@@ -157,17 +157,18 @@ sudo -u seomcp SEO_MCP_TOKEN_DB=/opt/seo-analytics-mcp/state/tokens.db \
   a different database and the server never sees the token — every command prints the file it
   used, so check that line. Add <code>--days N</code> to expire a token automatically.</p>
 
-  <h3>Rotate the link</h3>
-  <p>The path is shared, so rotating it replaces the link for everyone. For one person leaving,
-  revoke their token instead — rotate only if the link itself reaches somewhere public.</p>
-  <pre><code>python3 -c "import secrets; print('/mcp/' + secrets.token_hex(16))"
-sudo nano /opt/seo-analytics-mcp/.env     <span class="c"># update SEO_MCP_ENDPOINT_PATH</span>
-sudo systemctl restart seo-analytics-mcp</code></pre>
+  <h3>The endpoint path</h3>
+  <p>The endpoint is <code>/mcp</code>. It used to be a long random path, because before
+  this server had any authentication that path was the only access control. It is not
+  any more: every request needs either a Google sign-in or an issued token, and the
+  service refuses to start without one.</p>
+  <p>The old path still resolves, through an nginx alias, so connectors added before the
+  change keep working. That block can be deleted once nobody is using the long URL.</p>
+  <p>To remove someone’s access, revoke the person rather than changing the path —
+  rotating a shared URL cuts off the whole team to remove one of them.</p>
+
   <h3>Update these pages</h3>
-  <p>The committed copy carries <code>__ENDPOINT_PATH__</code> in place of the real path, because
-  the repository is public and that path is access control. Substitute it on the way out.</p>
-  <pre><code>sed "s|__ENDPOINT_PATH__|$PATH_SEGMENT|g" docs/index.html &gt; /tmp/d.html
-scp /tmp/d.html stg-vps:/tmp/d.html
+  <pre><code>scp docs/index.html stg-vps:/tmp/d.html
 ssh stg-vps 'sudo install -m 644 /tmp/d.html /var/www/mcp-docs/index.html'</code></pre>
 </section>
 
@@ -179,7 +180,7 @@ ssh stg-vps 'sudo install -m 644 /tmp/d.html /var/www/mcp-docs/index.html'</code
     <thead><tr><th>Setting</th><th>Purpose</th></tr></thead>
     <tbody>
       <tr><td class="k">SEO_MCP_SERVICE_ACCOUNT_JSON</td><td>The Google credential, base64-encoded. Base64 because a private key's newlines defeat most <code>.env</code> parsers</td></tr>
-      <tr><td class="k">SEO_MCP_ENDPOINT_PATH</td><td>The secret path — the access control</td></tr>
+      <tr><td class="k">SEO_MCP_ENDPOINT_PATH</td><td>Where the endpoint listens. <code>/mcp</code>. Not access control — the credential check is</td></tr>
       <tr><td class="k">SEO_MCP_ALLOWED_HOSTS</td><td>Public hostname. Without it every proxied request returns 421</td></tr>
       <tr><td class="k">SEO_MCP_PUBLIC_URL</td><td>This server’s own public address. Google sign-in builds its redirect URI from it, and it must match the Google console verbatim</td></tr>
       <tr><td class="k">GOOGLE_SSO_CLIENT_ID</td><td>A Google OAuth <em>Web application</em> client. Its redirect URI is <code>&lt;public url&gt;/auth/google/callback</code></td></tr>
