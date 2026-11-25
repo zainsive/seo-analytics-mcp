@@ -138,7 +138,8 @@ async def auth_status() -> dict[str, Any]:
     # own. A key with no OAuth gives public counts and nothing else; OAuth with no key
     # gives analytics but cannot list videos. Collapsing them into one yes/no would
     # leave a half-configured install looking wholly broken.
-    if (key := profile.youtube_api_key) or youtube_auth.configured():
+    yt_source = youtube_auth.source()
+    if (key := profile.youtube_api_key) or yt_source != "none":
         state: dict[str, Any] = {}
         channel = profile.youtube_channel
         if key and channel:
@@ -168,13 +169,14 @@ async def auth_status() -> dict[str, Any]:
                 "list are unavailable even though analytics may work.",
             }
 
-        if youtube_auth.configured():
+        if yt_source != "none":
             try:
                 await youtube_auth.credentials()
-                state["analytics"] = {"reachable": True}
+                state["analytics"] = {"reachable": True, "reading_as": yt_source}
             except Exception as exc:
                 state["analytics"] = {
                     "reachable": False,
+                    "reading_as": yt_source,
                     "error": f"{type(exc).__name__}: {exc}"[:260],
                 }
         else:

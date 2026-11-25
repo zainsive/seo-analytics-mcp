@@ -110,15 +110,20 @@ def for_scopes(required: set[str]):
     """The credential every tool uses. Scopes are requested per call so a read tool
     never holds more authority than it needs."""
     if subject := identity.caller():
-        return _as_person(subject, required)
+        return as_person(subject, required)
     info = _service_account_info()
     if info is None:
         return store.load(config.active_profile(), required)
     return service_account.Credentials.from_service_account_info(info, scopes=sorted(required))
 
 
-def _as_person(subject: str, required: set[str]):
-    """Build a live credential for the signed-in caller, or explain what is missing."""
+def as_person(subject: str, required: set[str]):
+    """Build a live credential for one named person, or explain what is missing.
+
+    Public, and takes the subject rather than reading it from the ambient request,
+    because YouTube resolves its credential from an async path where passing the name
+    explicitly is clearer than relying on the context travelling into a worker thread.
+    """
     link = connections.recall(subject)
     if link is None:
         raise ToolError(

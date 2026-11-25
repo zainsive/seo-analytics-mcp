@@ -8,6 +8,7 @@ silently - the second person simply gets an answer.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from urllib.parse import unquote_plus
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
@@ -34,6 +35,12 @@ def signed_in_as(monkeypatch, email):
     monkeypatch.setattr(identity, "caller", lambda: email)
     monkeypatch.setattr(cache.identity, "caller", lambda: email)
     monkeypatch.setattr(credentials.identity, "caller", lambda: email)
+
+
+def _a_key() -> str:
+    from cryptography.fernet import Fernet
+
+    return Fernet.generate_key().decode()
 
 
 # --- who is calling -----------------------------------------------------------
@@ -267,3 +274,113 @@ async def test_doctor_flags_sign_in_left_without_a_policy(monkeypatch, key_info)
     policy = next(c for c in checks if c["check"] == "google sign-in")
     assert policy["ok"] is False
     assert "admits nobody" in policy["detail"]
+
+
+# --- YouTube reads as the person too ------------------------------------------
+
+
+def test_the_sign_in_asks_for_youtube_in_the_same_consent(monkeypatch):
+    """Consent can only be asked once without sending everyone round again, so the
+    scopes YouTube needs go in the first screen even before YouTube is configured.
+    Adding them later would cost every person another sign-in."""
+    from seo_mcp.sso import google
+
+    monkeypatch.setenv("GOOGLE_SSO_CLIENT_ID", "cid")
+    monkeypatch.setenv("GOOGLE_SSO_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("SEO_MCP_PUBLIC_URL", "https://mcp.example.com")
+
+    requested = set(google.SCOPES)
+    assert scopes.for_youtube() <= requested
+    assert scopes.for_read() <= requested
+
+    # The scopes are percent-encoded into the query string, so decode before looking.
+    url = google.authorization_url("state-123")
+    decoded = unquote_plus(url)
+    for scope in scopes.for_youtube():
+        assert scope in decoded
+    # Without these two a returning person yields no refresh token, so there would be
+    # nothing to store and the grant would last exactly one hour.
+    assert "access_type=offline" in url
+    assert "prompt=select_account+consent" in url
+
+
+async def test_youtube_reads_as_the_signed_in_person_not_the_shared_token(monkeypatch):
+    """The shared channel-owner token is the thing this phase exists to stop using
+    while a person is asking. If it were still preferred, everyone would see the
+    channel through one account and it would look like it worked."""
+    from seo_mcp import credentials as creds_mod
+    from seo_mcp import youtube_auth
+
+    monkeypatch.setenv("YOUTUBE_REFRESH_TOKEN", "the-shared-token")
+    monkeypatch.setenv("YOUTUBE_OAUTH_CLIENT_ID", "cid")
+    monkeypatch.setenv("YOUTUBE_OAUTH_CLIENT_SECRET", "secret")
+    assert youtube_auth.configured()  # the fallback is available and still ignored
+
+    signed_in_as(monkeypatch, ALICE)
+    monkeypatch.setattr(youtube_auth.identity, "caller", lambda: ALICE)
+
+    asked: dict[str, object] = {}
+
+    def fake_as_person(subject, required):
+        asked["subject"], asked["required"] = subject, set(required)
+        return SimpleNamespace(token="alice-youtube-token")
+
+    monkeypatch.setattr(creds_mod, "as_person", fake_as_person)
+
+    result = await youtube_auth.credentials()
+    assert result.token == "alice-youtube-token"
+    assert asked["subject"] == ALICE
+    assert asked["required"] == scopes.for_youtube()
+
+
+async def test_a_person_without_the_youtube_grant_is_told_in_plain_words(monkeypatch, tmp_path):
+    """'yt-analytics.readonly' means nothing to somebody being asked to sign in again."""
+    from seo_mcp.sso import connections
+
+    monkeypatch.setenv("SEO_MCP_SECRET_KEY", _a_key())
+    connections.remember(
+        BOB, connections.GOOGLE, "refresh", sorted(scopes.for_read()), path=tmp_path / "c.db"
+    )
+    # credentials.connections IS this module, so capture the real function first -
+    # patching the attribute would otherwise make recall call itself forever.
+    real_recall = connections.recall
+    monkeypatch.setattr(
+        credentials.connections,
+        "recall",
+        lambda subject, **kw: real_recall(subject, path=tmp_path / "c.db"),
+    )
+
+    with pytest.raises(ToolError) as caught:
+        credentials.as_person(BOB, scopes.for_youtube())
+
+    message = str(caught.value)
+    assert "YouTube Analytics" in message
+    assert "yt-analytics.readonly" not in message  # the raw scope helps nobody
+
+
+async def test_a_caller_who_is_not_a_person_still_uses_the_shared_token(monkeypatch):
+    """A hand-issued token or a cron job has no Google account of its own, so the
+    shared channel-owner credential stays exactly as it was."""
+    from seo_mcp import youtube_auth
+
+    monkeypatch.setattr(youtube_auth.identity, "caller", lambda: None)
+    monkeypatch.delenv("YOUTUBE_REFRESH_TOKEN", raising=False)
+    monkeypatch.delenv("YOUTUBE_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("YOUTUBE_OAUTH_CLIENT_SECRET", raising=False)
+
+    assert youtube_auth.source() == "none"
+    with pytest.raises(ToolError) as caught:
+        await youtube_auth.credentials()
+    assert "YOUTUBE_REFRESH_TOKEN" in str(caught.value)
+
+
+def test_source_names_the_person_rather_than_the_missing_server_token(monkeypatch):
+    """configured() answers whether the SERVER holds a token. Diagnostics that ask it
+    about a signed-in person conclude 'not configured' and send them to run a CLI
+    command on a machine they have never seen."""
+    from seo_mcp import youtube_auth
+
+    monkeypatch.delenv("YOUTUBE_REFRESH_TOKEN", raising=False)
+    monkeypatch.setattr(youtube_auth.identity, "caller", lambda: ALICE)
+    assert youtube_auth.configured() is False
+    assert youtube_auth.source() == "person"

@@ -31,9 +31,18 @@ IDENTITY_SCOPES = ("openid", "email", "profile")
 # What you may read. Requested in the same consent so that signing in once is the
 # whole setup - asking later would mean a second trip through Google at the moment
 # somebody is trying to get an answer.
+#
+# The YouTube pair is requested even where YouTube is not configured yet, which looks
+# like asking for more than is needed. It is deliberate: configuration is an
+# environment variable somebody can set this afternoon, while consent is a thing you
+# can only ask each person for once without making them go round again. Granting a
+# scope for a channel you cannot see gives away nothing - Google returns an empty
+# result - whereas adding it later costs every single person another sign-in.
 DATA_SCOPES = (
     "https://www.googleapis.com/auth/webmasters.readonly",
     "https://www.googleapis.com/auth/analytics.readonly",
+    "https://www.googleapis.com/auth/yt-analytics.readonly",
+    "https://www.googleapis.com/auth/youtube.readonly",
 )
 SCOPES = IDENTITY_SCOPES + DATA_SCOPES
 

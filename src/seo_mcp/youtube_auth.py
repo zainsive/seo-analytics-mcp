@@ -19,7 +19,7 @@ from typing import Any
 
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import config
+from . import config, identity
 from .auth import scopes
 
 TOKEN_URI = "https://oauth2.googleapis.com/token"
@@ -42,6 +42,20 @@ def configured() -> bool:
     )
 
 
+def source() -> str:
+    """Where YouTube Analytics access comes from for whoever is calling right now.
+
+    'person' when a signed-in caller will read their own channel, 'server' when the
+    shared channel-owner token is used, 'none' when neither exists. Diagnostics have
+    to ask this rather than `configured()`: that answers only whether the server holds
+    a token, so for a signed-in person it says no and sends them off to run a CLI
+    command on a machine they do not have, to fix something that is not their problem.
+    """
+    if identity.caller():
+        return "person"
+    return "server" if configured() else "none"
+
+
 def _missing() -> list[str]:
     profile = config.active_profile()
     pairs = (
@@ -55,9 +69,25 @@ def _missing() -> list[str]:
 async def credentials() -> Any:
     """A live, refreshed credential for the YouTube APIs.
 
+    A signed-in person reads their own YouTube, for the same reason they read their own
+    Search Console: the alternative shows them a channel's figures through somebody
+    else's access, and looks like it worked. Whoever is not on the channel gets told
+    so, rather than quietly being shown it.
+
+    Everything below is the fallback for callers who are not people - a hand-issued
+    token, a cron job - and is the original shared-credential path, unchanged.
+
     Raises a ToolError naming the missing piece rather than letting google-auth raise
     something that reads as an internal fault.
     """
+    # Resolved here rather than inside the worker thread: the signed-in caller comes
+    # from the request context, and keeping that lookup on the event loop means this
+    # does not depend on how a context does or does not travel into a thread.
+    if subject := identity.caller():
+        from . import credentials as google_credentials
+
+        return await asyncio.to_thread(google_credentials.as_person, subject, scopes.for_youtube())
+
     if missing := _missing():
         raise ToolError(
             f"YouTube is not configured: {', '.join(missing)} "
