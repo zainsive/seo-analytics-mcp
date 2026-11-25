@@ -126,10 +126,14 @@ def as_person(subject: str, required: set[str]):
     """
     link = connections.recall(subject)
     if link is None:
+        # Name what was actually asked for. A YouTube question answered with "nothing
+        # to read Search Console with" reads as the server having lost track of the
+        # question, which is a worse impression than the real problem.
+        wanted = ", ".join(scope_names.get(s, s) for s in sorted(required))
         raise ToolError(
             f"{subject} has not connected a Google account to this server yet, so there "
-            "is nothing to read Search Console or Analytics with. Sign out of the "
-            "connector and sign in again to grant access."
+            f"is nothing to read {wanted} with. Sign out of the connector and sign in "
+            "again to grant access."
         )
     if not link.covers(required):
         missing = sorted(required - set(link.scopes))

@@ -384,3 +384,19 @@ def test_source_names_the_person_rather_than_the_missing_server_token(monkeypatc
     monkeypatch.setattr(youtube_auth.identity, "caller", lambda: ALICE)
     assert youtube_auth.configured() is False
     assert youtube_auth.source() == "person"
+
+
+async def test_the_not_connected_message_names_what_was_actually_asked_for(monkeypatch):
+    """Answering a YouTube question with "nothing to read Search Console with" reads
+    as the server having lost track of the question."""
+    monkeypatch.setattr(credentials.connections, "recall", lambda subject, **kw: None)
+
+    youtube = str(
+        pytest.raises(ToolError, credentials.as_person, ALICE, scopes.for_youtube()).value
+    )
+    assert "YouTube" in youtube
+    assert "Search Console" not in youtube
+
+    search = str(pytest.raises(ToolError, credentials.as_person, ALICE, {scopes.GSC_READ}).value)
+    assert "Search Console" in search
+    assert "YouTube" not in search
