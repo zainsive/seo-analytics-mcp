@@ -242,3 +242,40 @@ def test_totals_of_a_partial_fetch_are_flagged_as_not_being_property_totals():
 def test_a_complete_fetch_carries_no_partial_totals_warning():
     out = shape(result(gsc_rows(5), total_rows=5), top_n=10)
     assert not any("NOT the property total" in n for n in out["notes"])
+
+
+def test_an_audience_rate_is_weighted_by_how_many_people_are_in_it():
+    """Mailchimp's audience list carries no send count, so these rates used to fall
+    through to a plain mean. Real data: 61 audiences, several of them one person who
+    opened one email, which pulled an account-wide open rate of 48% out of a book of
+    lists whose large audiences all sit near 20%."""
+    from seo_mcp.shaping import _totals
+
+    rows = [
+        {"members": 30000, "open_rate": 0.20},
+        {"members": 1, "open_rate": 1.00},
+        {"members": 1, "open_rate": 1.00},
+        {"members": 1, "open_rate": 1.00},
+    ]
+    totals = _totals(rows, ("members", "open_rate"))
+
+    assert totals["members"] == 30003
+    # Weighted: (30000*0.20 + 3*1.00) / 30003
+    assert totals["open_rate"] == 0.2001
+    # The plain mean would have been 0.65, which describes nobody.
+    assert totals["open_rate"] < 0.21
+
+
+def test_a_real_send_count_outranks_a_headcount_as_the_weight():
+    """members is the last resort. Where emails_sent exists it is the honest
+    denominator, and letting a headcount win would quietly change campaign maths."""
+    from seo_mcp.shaping import _totals
+
+    rows = [
+        {"members": 1, "emails_sent": 1000, "unique_opens": 100, "open_rate": 0.10},
+        {"members": 9999, "emails_sent": 10, "unique_opens": 9, "open_rate": 0.90},
+    ]
+    totals = _totals(rows, ("members", "emails_sent", "unique_opens", "open_rate"))
+
+    # Both components were summed, so the exact ratio wins over any weighting at all.
+    assert totals["open_rate"] == round(109 / 1010, 4)

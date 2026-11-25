@@ -121,7 +121,11 @@ _RATIOS = (
     # one numerator column here rather than teaching this table about multi-column sums.
     ("engagement_rate", "engagements", "impressions"),
 )
-_WEIGHT_KEYS = ("impressions", "sessions", "emails_sent", "views")
+# Ordered by preference: a real traffic column beats a headcount. `members` is last
+# and exists for Mailchimp's audience list, whose rows carry no send count at all -
+# without it those rates fall through to a plain mean, where a one-person audience that
+# opened once counts as much as one holding thirty thousand people.
+_WEIGHT_KEYS = ("impressions", "sessions", "emails_sent", "views", "members")
 
 
 def _totals(rows: list[dict[str, Any]], metric_keys: tuple[str, ...] | list[str]) -> dict[str, Any]:
