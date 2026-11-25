@@ -143,11 +143,28 @@ async def auth_status() -> dict[str, Any]:
     if (key := profile.youtube_api_key) or yt_source != "none":
         state: dict[str, Any] = {}
         channel = profile.youtube_channel
-        if key and channel:
+        if not channel:
+            state["public"] = {
+                "reachable": None,
+                "note": "YOUTUBE_CHANNEL_ID is not set, so nothing could be probed. "
+                "Pass channel_id once, or set the default.",
+            }
+        else:
+            # Probed with whatever the tools themselves would use, rather than with
+            # the API key specifically. Reporting "unavailable, no API key" while the
+            # tools happily answer through the caller's own grant would send somebody
+            # to the Cloud console to fix a thing that is not broken. It also makes
+            # this the one place that proves the configured channel id is real.
+            from .youtube_tools import public_access
+
             try:
-                info = await youtube.channel_stats(key, channel)
+                access = await public_access()
+                info = await youtube.channel_stats(access, channel)
                 state["public"] = {
                     "reachable": True,
+                    "signed_with": "the server's API key"
+                    if isinstance(access, str)
+                    else "your own Google sign-in",
                     "channel": info.title,
                     "subscribers": info.subscribers,
                     "videos": info.videos,
@@ -157,18 +174,6 @@ async def auth_status() -> dict[str, Any]:
                     "reachable": False,
                     "error": f"{type(exc).__name__}: {exc}"[:220],
                 }
-        elif key:
-            state["public"] = {
-                "reachable": None,
-                "note": "An API key is set but YOUTUBE_CHANNEL_ID is not, so nothing "
-                "could be probed. Pass channel_id once, or set the default.",
-            }
-        else:
-            state["public"] = {
-                "reachable": False,
-                "note": "YOUTUBE_API_KEY is not set, so the public counts and the video "
-                "list are unavailable even though analytics may work.",
-            }
 
         if yt_source != "none":
             try:

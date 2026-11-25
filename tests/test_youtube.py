@@ -240,7 +240,7 @@ async def test_public_counts_prefer_the_api_key_because_they_are_the_same_for_ev
     monkeypatch.setenv("YOUTUBE_API_KEY", "the-key")
     monkeypatch.setattr(youtube_tools.youtube_auth, "source", lambda: "person")
 
-    assert await youtube_tools._public_access() == "the-key"
+    assert await youtube_tools.public_access() == "the-key"
 
 
 async def test_without_a_key_public_counts_fall_back_to_the_caller(monkeypatch):
@@ -258,7 +258,7 @@ async def test_without_a_key_public_counts_fall_back_to_the_caller(monkeypatch):
     monkeypatch.setattr(youtube_tools.youtube_auth, "source", lambda: "person")
     monkeypatch.setattr(youtube_tools.youtube_auth, "credentials", fake_credentials)
 
-    assert await youtube_tools._public_access() is sentinel
+    assert await youtube_tools.public_access() is sentinel
 
 
 async def test_with_neither_a_key_nor_a_caller_it_says_both_ways_out(monkeypatch):
@@ -270,7 +270,7 @@ async def test_with_neither_a_key_nor_a_caller_it_says_both_ways_out(monkeypatch
     monkeypatch.setattr(youtube_tools.youtube_auth, "source", lambda: "none")
 
     with pytest.raises(ToolError) as caught:
-        await youtube_tools._public_access()
+        await youtube_tools.public_access()
     message = str(caught.value)
     assert "sign in" in message
     assert "YOUTUBE_API_KEY" in message

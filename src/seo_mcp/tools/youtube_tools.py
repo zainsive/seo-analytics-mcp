@@ -23,7 +23,7 @@ TTL = 3 * 3600  # YouTube Analytics is recomputed slowly; an hour stale costs no
 DIMENSIONS = ("day", "video", "country")
 
 
-async def _public_access() -> Any:
+async def public_access() -> Any:
     """What to sign a request for public channel figures with.
 
     The API key first, because these numbers are on the channel page for anybody to
@@ -76,7 +76,7 @@ async def youtube_channel_stats(channel_id: str | None = None) -> dict[str, Any]
     """
     profile = config.active_profile()
     ident = _channel(channel_id)
-    access = await _public_access()
+    access = await public_access()
     ck = cache.key(profile, "youtube.channel", {"channel": ident})
 
     async def producer():
@@ -119,7 +119,7 @@ async def youtube_recent_videos(channel_id: str | None = None, limit: int = 25) 
     """
     profile = config.active_profile()
     ident = _channel(channel_id)
-    access = await _public_access()
+    access = await public_access()
     ck = cache.key(profile, "youtube.videos", {"channel": ident, "limit": limit})
     result = await cache.get_or_set(
         profile,
