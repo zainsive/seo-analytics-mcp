@@ -202,8 +202,16 @@ def test_an_unrecognised_refresh_failure_is_passed_through_not_swallowed():
 # --- scopes -------------------------------------------------------------------
 
 
-def test_youtube_scopes_are_not_in_the_default_consent():
-    """A Search Console user must not be asked to approve YouTube access."""
+def test_youtube_scopes_are_not_in_the_local_install_consent():
+    """Someone running `seo-analytics-mcp auth` for Search Console must not be asked
+    to approve YouTube as well. They opt in separately with `youtube-auth`.
+
+    This is deliberately the opposite of the hosted Google sign-in, which does ask for
+    YouTube up front - see test_per_user. The two consents answer different questions.
+    One person at a terminal can run a second command whenever they feel like it; a
+    team cannot be sent back through a consent screen cheaply, so the hosted flow asks
+    once for everything. Do not make these two agree without reading both reasons.
+    """
     from seo_mcp.auth import scopes
 
     assert not scopes.for_youtube() & scopes.for_read()
@@ -216,3 +224,74 @@ def test_both_youtube_scopes_are_read_only():
     for scope in scopes.for_youtube():
         assert scope.endswith(".readonly"), scope
         assert scope in scopes.DESCRIPTIONS
+
+
+# --- what a public request is signed with -------------------------------------
+
+
+async def test_public_counts_prefer_the_api_key_because_they_are_the_same_for_everyone(
+    monkeypatch,
+):
+    """Subscriber counts are on the channel page for anybody to read, so there is no
+    per-person answer to give. Spending somebody's consent on public data, or refusing
+    it because they have not signed in, would both be wrong."""
+    from seo_mcp.tools import youtube_tools
+
+    monkeypatch.setenv("YOUTUBE_API_KEY", "the-key")
+    monkeypatch.setattr(youtube_tools.youtube_auth, "source", lambda: "person")
+
+    assert await youtube_tools._public_access() == "the-key"
+
+
+async def test_without_a_key_public_counts_fall_back_to_the_caller(monkeypatch):
+    """This is what lets a deployment read its own channel without anybody first
+    going to the Cloud console to mint an API key. The sign-in already asked for the
+    scope; using it is the difference between these tools working and not."""
+    from seo_mcp.tools import youtube_tools
+
+    monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
+    sentinel = object()
+
+    async def fake_credentials():
+        return sentinel
+
+    monkeypatch.setattr(youtube_tools.youtube_auth, "source", lambda: "person")
+    monkeypatch.setattr(youtube_tools.youtube_auth, "credentials", fake_credentials)
+
+    assert await youtube_tools._public_access() is sentinel
+
+
+async def test_with_neither_a_key_nor_a_caller_it_says_both_ways_out(monkeypatch):
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    from seo_mcp.tools import youtube_tools
+
+    monkeypatch.delenv("YOUTUBE_API_KEY", raising=False)
+    monkeypatch.setattr(youtube_tools.youtube_auth, "source", lambda: "none")
+
+    with pytest.raises(ToolError) as caught:
+        await youtube_tools._public_access()
+    message = str(caught.value)
+    assert "sign in" in message
+    assert "YOUTUBE_API_KEY" in message
+
+
+def test_the_data_client_accepts_a_key_or_a_credential(monkeypatch):
+    """One helper decides which, so neither call site can get it wrong."""
+    from seo_mcp.clients import youtube
+
+    built = {}
+
+    def fake_build(api, version, **kw):
+        built.update(kw)
+        return object()
+
+    monkeypatch.setattr(youtube, "build", fake_build)
+
+    youtube._data_service("a-key")
+    assert built == {"developerKey": "a-key", "cache_discovery": False}
+
+    built.clear()
+    creds = object()
+    youtube._data_service(creds)
+    assert built == {"credentials": creds, "cache_discovery": False}

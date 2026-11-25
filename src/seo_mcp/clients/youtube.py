@@ -117,15 +117,30 @@ def _fail(exc: HttpError, what: str) -> ToolError:
     return ToolError(f"YouTube rejected the {what} request: {detail or exc}")
 
 
-# --- public statistics, by API key --------------------------------------------
+# --- public statistics ---------------------------------------------------------
+#
+# These read figures anybody can see on the channel page, so there is no "as you" to
+# honour here - the answer is the same whoever asks. What differs is only what the
+# request is signed with, and either works: an API key where the server has one, and
+# otherwise the caller's own YouTube grant, which the sign-in already asks for. That
+# second path is what lets a deployment read a channel without anybody having to go
+# and create an API key first.
 
 
-async def channel_stats(api_key: str, channel: str) -> Channel:
+def _data_service(access: Any):
+    """A Data API client from either an API key or a credential."""
+    if isinstance(access, str):
+        return build(DATA_API, DATA_VERSION, developerKey=access, cache_discovery=False)
+    return build(DATA_API, DATA_VERSION, credentials=access, cache_discovery=False)
+
+
+async def channel_stats(access: Any, channel: str) -> Channel:
     ident = channel_id(channel)
 
     def work():
-        service = build(DATA_API, DATA_VERSION, developerKey=api_key, cache_discovery=False)
-        return service.channels().list(part="snippet,statistics", id=ident).execute()
+        return (
+            _data_service(access).channels().list(part="snippet,statistics", id=ident).execute()
+        )
 
     try:
         payload = await asyncio.to_thread(work)
@@ -149,13 +164,13 @@ async def channel_stats(api_key: str, channel: str) -> Channel:
     )
 
 
-async def recent_videos(api_key: str, channel: str, *, limit: int = 25) -> QueryResult:
+async def recent_videos(access: Any, channel: str, *, limit: int = 25) -> QueryResult:
     """The channel's most recent uploads with their public counts."""
     ident = channel_id(channel)
     limit = max(1, min(limit, 50))
 
     def work():
-        service = build(DATA_API, DATA_VERSION, developerKey=api_key, cache_discovery=False)
+        service = _data_service(access)
         # The uploads playlist, rather than search.list: it is exact, ordered, and
         # costs 1 quota unit instead of 100.
         channels = service.channels().list(part="contentDetails", id=ident).execute()

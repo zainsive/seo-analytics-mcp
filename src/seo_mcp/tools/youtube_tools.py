@@ -23,17 +23,30 @@ TTL = 3 * 3600  # YouTube Analytics is recomputed slowly; an hour stale costs no
 DIMENSIONS = ("day", "video", "country")
 
 
-def _api_key() -> str:
-    key = config.active_profile().youtube_api_key
-    if not key:
-        raise ToolError(
-            "No YouTube API key is configured. Create one in the Google Cloud console "
-            "under APIs & Services > Credentials, enable the YouTube Data API v3 for "
-            "that project, then set YOUTUBE_API_KEY in the server's environment. The "
-            "key is never passed as a tool argument, because tool arguments are visible "
-            "in the transcript."
-        )
-    return key
+async def _public_access() -> Any:
+    """What to sign a request for public channel figures with.
+
+    The API key first, because these numbers are on the channel page for anybody to
+    read: there is no per-person answer to give, and the key costs nobody a consent.
+    Where no key is configured the caller's own YouTube grant does the same job, which
+    is the difference between these tools working out of the box and a deployment
+    having to go and create an API key before it can read a public subscriber count.
+
+    Analytics is the opposite case and never comes through here - watch time and
+    traffic sources are private to the channel, so they always read as the person.
+    """
+    if key := config.active_profile().youtube_api_key:
+        return key
+    if youtube_auth.source() != "none":
+        return await youtube_auth.credentials()
+    raise ToolError(
+        "YouTube is not reachable: no API key is configured and nobody is signed in to "
+        "read it as. Either sign in to the connector with a Google account that can see "
+        "the channel, or create an API key in the Google Cloud console under APIs & "
+        "Services > Credentials, enable the YouTube Data API v3 for that project, and "
+        "set YOUTUBE_API_KEY in the server's environment. The key is never passed as a "
+        "tool argument, because tool arguments are visible in the transcript."
+    )
 
 
 def _channel(value: str | None) -> str:
@@ -63,13 +76,13 @@ async def youtube_channel_stats(channel_id: str | None = None) -> dict[str, Any]
     """
     profile = config.active_profile()
     ident = _channel(channel_id)
-    key = _api_key()
+    access = await _public_access()
     ck = cache.key(profile, "youtube.channel", {"channel": ident})
 
     async def producer():
         from ..shaping import QueryResult
 
-        channel = await youtube.channel_stats(key, ident)
+        channel = await youtube.channel_stats(access, ident)
         return QueryResult(
             rows=[
                 {
@@ -106,13 +119,13 @@ async def youtube_recent_videos(channel_id: str | None = None, limit: int = 25) 
     """
     profile = config.active_profile()
     ident = _channel(channel_id)
-    key = _api_key()
+    access = await _public_access()
     ck = cache.key(profile, "youtube.videos", {"channel": ident, "limit": limit})
     result = await cache.get_or_set(
         profile,
         ck,
         ttl=TTL,
-        producer=lambda: youtube.recent_videos(key, ident, limit=limit),
+        producer=lambda: youtube.recent_videos(access, ident, limit=limit),
     )
     return shape(result, top_n=limit, sort_by=None, export_dir=_base.export_dir(profile))
 
