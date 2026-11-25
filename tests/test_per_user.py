@@ -409,3 +409,29 @@ def test_missing_access_is_listed_the_way_a_person_would_say_it():
     assert credentials.names_for({s.GSC_READ, s.GA4_READ}) == "Analytics and Search Console"
     assert credentials.names_for(s.for_youtube()) == "YouTube and YouTube Analytics"
     assert credentials.names_for(set()) == "anything"
+
+
+async def test_auth_status_answers_a_signed_in_person_who_has_connected_nothing(monkeypatch):
+    """The exact state everybody is in the first time they call it, and the one state
+    nothing exercised: signed in, nothing connected, so every lookup returns None.
+
+    A local named `link` shadowed the sso.link module here and made this crash - in
+    the one tool somebody reaches for precisely because their access is not working.
+    """
+    from seo_mcp.tools import meta_tools
+
+    monkeypatch.setattr(meta_tools, "caller", lambda: ALICE)
+    monkeypatch.setattr(meta_tools.connections, "recall", lambda subject, *a, **k: None)
+    monkeypatch.setenv("MAILCHIMP_API_KEY", "shared-key-us7")
+
+    async def unreachable(*a, **k):
+        raise RuntimeError("no network in tests")
+
+    monkeypatch.setattr(meta_tools.mailchimp, "ping", unreachable)
+
+    out = await meta_tools.auth_status()
+
+    assert out["you"]["signed_in_as"] == ALICE
+    assert out["you"]["google_connected"] is False
+    # It got past Mailchimp rather than dying on the way, and said whose key that was.
+    assert out["mailchimp"]["reading_as"] == "the server's shared key"

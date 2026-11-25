@@ -16,6 +16,7 @@ from ..identity import caller
 from ..server import mcp
 from ..sso import connections
 from ..sso import google as google_sso
+from ..sso import link as connect_flow
 from . import _base
 
 
@@ -57,9 +58,13 @@ async def auth_status() -> dict[str, Any]:
     # is the first thing somebody needs: "authorised" is no longer a property of the
     # server, it is a property of the person reading the answer.
     if subject := caller():
-        link = connections.recall(subject)
+        # Named for what it is. Calling this `link` shadowed the sso.link module for
+        # the rest of the function, and since it is None for anybody who has not
+        # connected Google, the first use of the module further down crashed the one
+        # tool somebody calls when they are already confused about their access.
+        google_link = connections.recall(subject)
         you: dict[str, Any] = {"signed_in_as": subject}
-        if link is None:
+        if google_link is None:
             you["google_connected"] = False
             everything = credentials.names_for(google_sso.DATA_SCOPES)
             you["next_step"] = (
@@ -67,7 +72,7 @@ async def auth_status() -> dict[str, Any]:
                 f"access to your {everything}. Google asks once, for all of them."
             )
         else:
-            held = set(link.scopes)
+            held = set(google_link.scopes)
             you["google_connected"] = True
             you["can_read"] = sorted(
                 name for scope, name in credentials.scope_names.items() if scope in held
@@ -80,7 +85,7 @@ async def auth_status() -> dict[str, Any]:
             if missing:
                 you["not_granted"] = missing
                 you["next_step"] = f"Sign in again to add {', '.join(missing)}. Google asks once."
-            you["granted_on"] = (link.updated_at or "")[:10]
+            you["granted_on"] = (google_link.updated_at or "")[:10]
         you["note"] = (
             "Queries run as you, so you see the properties your own Google account is "
             "granted - not what anybody else can see."
@@ -110,7 +115,7 @@ async def auth_status() -> dict[str, Any]:
                 "reading_as": "you" if mine else "the server's shared key",
                 "error": f"{type(exc).__name__}: {exc}"[:220],
             }
-        if subject and not mine and link.available():
+        if subject and not mine and connect_flow.available():
             out["mailchimp"]["note"] = (
                 "This is the shared key, not your own Mailchimp login. Call "
                 "connect_account with 'mailchimp' to read as yourself."
