@@ -32,7 +32,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyUrl
 
 from .. import tokens as static_tokens
-from . import google, store
+from . import connections, google, store
 
 SCOPE = "seo"  # one scope: everything here is read-only analytics
 
@@ -98,7 +98,8 @@ class GoogleFederatedProvider:
                 "This sign-in link has already been used or has expired. Start again "
                 "from your AI tool."
             )
-        identity = await google.identify(google_code)
+        person = await google.identify(google_code)
+        _remember_grant(person)
         code = store.issue_code(
             {
                 "client_id": pending["client_id"],
@@ -106,7 +107,7 @@ class GoogleFederatedProvider:
                 "redirect_uri_provided_explicitly": pending["redirect_uri_provided_explicitly"],
                 "code_challenge": pending["code_challenge"],
                 "scopes": pending["scopes"],
-                "subject": identity["email"],
+                "subject": person.email,
                 "resource": pending.get("resource"),
             }
         )
@@ -236,6 +237,31 @@ class GoogleFederatedProvider:
             scope=" ".join(scopes),
             refresh_token=refresh,
         )
+
+
+def _remember_grant(person: google.SignedIn) -> None:
+    """Keep the grant that lets the server read Google as this person.
+
+    Google only returns a refresh token when it feels like it - a returning person who
+    has already consented gets none unless prompt=consent was sent. So a missing one is
+    not an error if we already hold a working grant for them; it is only a problem the
+    first time, and then it has to be said plainly rather than leaving somebody signed
+    in but unable to read anything.
+    """
+    if person.refresh_token:
+        connections.remember(person.email, connections.GOOGLE, person.refresh_token, person.scopes)
+        return
+    if connections.recall(person.email) is not None:
+        logging.getLogger("seo_mcp").info(
+            "no new refresh token for %s; keeping the one already stored", person.email
+        )
+        return
+    raise google.SignInRefused(
+        "Google did not return the lasting permission this server needs, so it cannot "
+        "read anything on your behalf. This happens when the account has authorised "
+        "this app before. Remove it at myaccount.google.com/permissions and sign in "
+        "again."
+    )
 
 
 def settings() -> Any:

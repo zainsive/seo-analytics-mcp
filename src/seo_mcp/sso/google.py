@@ -13,6 +13,7 @@ accepting unsigned tokens.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
 
@@ -23,11 +24,36 @@ from .. import config
 AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 CALLBACK_PATH = "/auth/google/callback"
-SCOPES = ("openid", "email", "profile")
+
+# Who you are. Always requested; without these there is nobody to admit.
+IDENTITY_SCOPES = ("openid", "email", "profile")
+
+# What you may read. Requested in the same consent so that signing in once is the
+# whole setup - asking later would mean a second trip through Google at the moment
+# somebody is trying to get an answer.
+DATA_SCOPES = (
+    "https://www.googleapis.com/auth/webmasters.readonly",
+    "https://www.googleapis.com/auth/analytics.readonly",
+)
+SCOPES = IDENTITY_SCOPES + DATA_SCOPES
 
 
 class SignInRefused(Exception):
     """Google authenticated somebody this server will not admit."""
+
+
+@dataclass(frozen=True)
+class SignedIn:
+    """A verified person, and the grant that lets the server act for them."""
+
+    email: str
+    name: str | None
+    via: str
+    refresh_token: str | None
+    scopes: list[str]
+
+    def granted(self, scope: str) -> bool:
+        return scope in self.scopes
 
 
 def configured() -> bool:
@@ -69,9 +95,15 @@ def authorization_url(state: str) -> str:
         "response_type": "code",
         "scope": " ".join(SCOPES),
         "state": state,
-        # Force the account chooser. Without it a shared machine silently reuses
-        # whoever signed in last, which is the wrong person surprisingly often.
-        "prompt": "select_account",
+        # Without this Google issues an access token good for an hour and no refresh
+        # token, so the server could act for somebody exactly once.
+        "access_type": "offline",
+        # select_account forces the chooser, because a shared machine otherwise reuses
+        # whoever signed in last. consent is what makes Google re-issue a refresh token
+        # for somebody who has authorised before; without it a returning person gets
+        # none and there is nothing to store.
+        "prompt": "select_account consent",
+        "include_granted_scopes": "true",
     }
     if domains := allowed_domains():
         # A hint only - it pre-fills the chooser. The claim is still checked below,
@@ -80,11 +112,11 @@ def authorization_url(state: str) -> str:
     return f"{AUTH_ENDPOINT}?{urlencode(params)}"
 
 
-async def identify(code: str) -> dict[str, Any]:
-    """Exchange Google's code for an identity, or refuse.
+async def identify(code: str) -> SignedIn:
+    """Exchange Google's code for a verified person and their grant, or refuse.
 
-    Returns the verified claims. Raises SignInRefused with a sentence fit to show a
-    person in a browser, because that is exactly where it ends up.
+    Raises SignInRefused with a sentence fit to show somebody in a browser, because
+    that is exactly where it ends up.
     """
     profile = config.active_profile()
 
@@ -114,20 +146,34 @@ async def identify(code: str) -> dict[str, Any]:
         token = payload.get("id_token")
         if not token:
             raise SignInRefused("Google returned no identity token, so nobody can be identified.")
-        return google.oauth2.id_token.verify_oauth2_token(
+        claims = google.oauth2.id_token.verify_oauth2_token(
             token,
             google.auth.transport.requests.Request(),
             audience=profile.google_sso_client_id,
         )
+        # Google reports what it actually granted, which can be less than was asked
+        # for: the consent screen lets people untick things.
+        return {
+            "claims": claims,
+            "refresh_token": payload.get("refresh_token"),
+            "scopes": str(payload.get("scope") or "").split(),
+        }
 
     try:
-        claims = await asyncio.to_thread(work)
+        result = await asyncio.to_thread(work)
     except SignInRefused:
         raise
     except Exception as exc:
         raise SignInRefused(f"Google sign-in could not be verified: {str(exc)[:200]}") from exc
 
-    return _admit(claims)
+    admitted = _admit(result["claims"])
+    return SignedIn(
+        email=admitted["email"],
+        name=admitted.get("name"),
+        via=admitted["via"],
+        refresh_token=result["refresh_token"],
+        scopes=result["scopes"],
+    )
 
 
 def _admit(claims: dict[str, Any]) -> dict[str, Any]:

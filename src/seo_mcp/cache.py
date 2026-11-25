@@ -1,4 +1,7 @@
-"""gzip-json TTL cache on disk, keyed by profile + method + params. mtime is the clock."""
+"""gzip-json TTL cache on disk, keyed by caller + profile + method + params.
+
+mtime is the clock.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from . import identity
 from .config import Profile
 from .shaping import QueryResult
 
@@ -24,9 +28,18 @@ MAX_CACHE_FILES = 400
 
 
 def key(profile: Profile, method: str, params: Mapping[str, Any]) -> str:
-    """Profile is part of the key or two Google accounts collide on one machine."""
+    """The cache key.
+
+    The profile is in it so two Google accounts cannot collide on one machine. The
+    CALLER is in it for a sharper reason: once queries run as whoever is signed in,
+    two people asking the same question are asking two different questions, and
+    answering the second from the first one's cache would hand them a view of data
+    they may not be allowed to see. A shared key would turn the cache into a way
+    around the permissions this whole arrangement exists to honour.
+    """
     payload = json.dumps(
         {
+            "who": identity.caller() or "",
             "p": profile.name,
             "m": method,
             "a": {k: v for k, v in sorted(params.items()) if v is not None},

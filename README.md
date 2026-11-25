@@ -325,6 +325,36 @@ missing either the product or the role authenticates perfectly and reads nothing
 `auth_status` reports which Pages it can actually see, so that case is visible rather
 than silent.
 
+### Queries run as the person who asked
+
+When somebody signs in, Google is asked for read access to their Search Console and
+Analytics as part of the same consent. That grant is stored against their email, and
+every query afterwards runs as **them** — so two people asking the same question can
+get different answers, because they are granted different properties.
+
+| Variable | Purpose |
+|:--|:--|
+| `SEO_MCP_SECRET_KEY` | Fernet key encrypting the stored grants. Required once sign-in is on |
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Three rules this follows, and the reasons are the design:
+
+* **A signed-in person never falls back to the server's own credential.** If they have
+  not granted a scope, they are told to grant it. Falling back would show them somebody
+  else's view of the data and look like it worked.
+* **Cache keys include the caller.** Without that, the second person to ask a question
+  gets the first person's answer out of cache, straight past the permissions.
+* **Grants are encrypted at rest.** Every other secret here is stored as a hash, but a
+  refresh token has to be usable again, so the database would otherwise hand over
+  everyone's Google access. Rotating `SEO_MCP_SECRET_KEY` is safe: it reads as "not
+  connected" and people sign in again.
+
+Callers without a human identity — a hand-issued static token, the CLI, a stdio
+install — still use the service account exactly as before.
+
 ### Google sign-in (optional front door)
 
 With it on, somebody adds the connector in their AI tool, clicks through a Google

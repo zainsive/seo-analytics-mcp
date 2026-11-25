@@ -14,8 +14,9 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
-from seo_mcp.sso import google, store
+from seo_mcp.sso import connections, google, store, vault
 from seo_mcp.sso.provider import GoogleFederatedProvider
 
 DOMAIN = "example.com"
@@ -25,7 +26,11 @@ PERSON = f"someone@{DOMAIN}"
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
     """A throwaway database and a complete sign-in configuration."""
+    from cryptography.fernet import Fernet
+
     monkeypatch.setenv("SEO_MCP_TOKEN_DB", str(tmp_path / "tokens.db"))
+    monkeypatch.setenv("SEO_MCP_SECRET_KEY", Fernet.generate_key().decode())
+    vault._cipher.cache_clear()  # the key is cached per process
     monkeypatch.setattr(
         google.config,
         "active_profile",
@@ -132,7 +137,8 @@ def test_sign_in_stays_off_without_a_public_url(monkeypatch):
 def test_the_authorization_url_forces_an_account_choice():
     """Otherwise a shared machine silently reuses whoever signed in last."""
     params = parse_qs(urlparse(google.authorization_url("state-123")).query)
-    assert params["prompt"] == ["select_account"]
+    assert params["prompt"] == ["select_account consent"]
+    assert params["access_type"] == ["offline"]  # or Google issues no refresh token
     assert params["state"] == ["state-123"]
     assert params["redirect_uri"] == ["https://mcp.example.com/auth/google/callback"]
     assert params["hd"] == [DOMAIN]
@@ -304,10 +310,20 @@ def app(monkeypatch):
 
     provider = GoogleFederatedProvider()
 
-    async def fake_identify(code: str):
-        if code == "bad-person":
-            return google._admit({"email": "nobody@random.test", "email_verified": True})
-        return google._admit({"email": PERSON, "email_verified": True, "hd": DOMAIN})
+    async def fake_identify(code: str) -> google.SignedIn:
+        claims = (
+            {"email": "nobody@random.test", "email_verified": True}
+            if code == "bad-person"
+            else {"email": PERSON, "email_verified": True, "hd": DOMAIN}
+        )
+        admitted = google._admit(claims)  # refuses before any grant is stored
+        return google.SignedIn(
+            email=admitted["email"],
+            name=admitted.get("name"),
+            via=admitted["via"],
+            refresh_token="fixture-refresh-token",
+            scopes=list(google.SCOPES),
+        )
 
     monkeypatch.setattr(google, "identify", fake_identify)
 
@@ -571,3 +587,100 @@ async def test_a_non_http_scope_passes_straight_through():
 
     await AliasHeaderMiddleware(app)({"type": "lifespan"}, None, None)
     assert reached == ["lifespan"]
+
+
+# --- per-person Google credentials --------------------------------------------
+
+
+def test_signing_in_stores_the_grant_that_lets_the_server_act_as_them():
+    from seo_mcp.sso.provider import _remember_grant
+
+    _remember_grant(
+        google.SignedIn(
+            email=PERSON, name="A Person", via="domain", refresh_token="r-1", scopes=["a", "b"]
+        )
+    )
+    link = connections.recall(PERSON)
+    assert link is not None
+    assert link.refresh_token == "r-1"
+    assert link.covers({"a"}) and not link.covers({"a", "c"})
+
+
+def test_the_stored_grant_is_encrypted_at_rest(tmp_path):
+    """The database holds hashes of everything else. This is the one secret that has
+    to come back out intact, so the file must not carry it readable."""
+    from seo_mcp.sso.provider import _remember_grant
+
+    secret = "refresh-token-that-must-not-appear-on-disk"
+    _remember_grant(
+        google.SignedIn(email=PERSON, name=None, via="d", refresh_token=secret, scopes=["a"])
+    )
+    raw = b"".join(p.read_bytes() for p in tmp_path.glob("tokens.db*"))
+    assert raw, "no database files found"
+    assert secret.encode() not in raw
+    assert connections.recall(PERSON).refresh_token == secret  # still usable
+
+
+def test_a_rotated_encryption_key_reads_as_not_connected(monkeypatch):
+    """Rather than raising a cryptography error at query time. The honest answer is
+    'sign in again', and that is what an absent connection already tells people."""
+    from cryptography.fernet import Fernet
+
+    from seo_mcp.sso.provider import _remember_grant
+
+    _remember_grant(
+        google.SignedIn(email=PERSON, name=None, via="d", refresh_token="r", scopes=["a"])
+    )
+    monkeypatch.setenv("SEO_MCP_SECRET_KEY", Fernet.generate_key().decode())
+    vault._cipher.cache_clear()
+    assert connections.recall(PERSON) is None
+
+
+def test_a_returning_person_keeps_the_grant_when_google_sends_none():
+    """Google withholds a refresh token from somebody who has consented before. That
+    must not wipe the one already held."""
+    from seo_mcp.sso.provider import _remember_grant
+
+    _remember_grant(
+        google.SignedIn(email=PERSON, name=None, via="d", refresh_token="original", scopes=["a"])
+    )
+    _remember_grant(
+        google.SignedIn(email=PERSON, name=None, via="d", refresh_token=None, scopes=["a"])
+    )
+    assert connections.recall(PERSON).refresh_token == "original"
+
+
+def test_a_first_sign_in_with_no_refresh_token_is_refused_not_half_completed():
+    """Admitting them would leave somebody signed in and unable to read anything,
+    with nothing saying why."""
+    from seo_mcp.sso.provider import _remember_grant
+
+    with pytest.raises(google.SignInRefused, match="myaccount.google.com/permissions"):
+        _remember_grant(
+            google.SignedIn(
+                email="newcomer@example.com", name=None, via="d", refresh_token=None, scopes=[]
+            )
+        )
+
+
+def test_forgetting_a_person_removes_their_stored_access():
+    from seo_mcp.sso.provider import _remember_grant
+
+    _remember_grant(
+        google.SignedIn(email=PERSON, name=None, via="d", refresh_token="r", scopes=["a"])
+    )
+    assert connections.forget(PERSON) == 1
+    assert connections.recall(PERSON) is None
+
+
+def test_an_email_is_matched_regardless_of_case():
+    """Google returns addresses in whatever case the person typed."""
+    connections.remember("Someone@Example.COM", connections.GOOGLE, "r", ["a"])
+    assert connections.recall("someone@example.com") is not None
+
+
+def test_without_an_encryption_key_a_grant_is_refused_rather_than_stored_readable(monkeypatch):
+    monkeypatch.delenv("SEO_MCP_SECRET_KEY", raising=False)
+    vault._cipher.cache_clear()
+    with pytest.raises(ToolError, match="encryption key"):
+        connections.remember(PERSON, connections.GOOGLE, "r", ["a"])

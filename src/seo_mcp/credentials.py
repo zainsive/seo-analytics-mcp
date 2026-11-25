@@ -1,15 +1,21 @@
 """Where the server's Google credentials come from.
 
-Two modes, chosen by environment:
+Resolution order, and the order is the whole design:
 
-  service_account  a key supplied via the environment. Built for servers: no browser,
-                   no refresh-token expiry, no coupling to a person's account. This is
-                   what the hosted deployment uses.
-  user             the OAuth token written by `seo-analytics-mcp auth`. What a local
-                   stdio install uses.
+  1. the caller's own grant   when a signed-in person has connected their Google
+                              account, every query runs as them. They see the
+                              properties they are granted and nothing else.
+  2. service account          a key from the environment. Used for callers who are
+                              not people - a hand-issued static token, a cron job.
+  3. local user token         what `seo-analytics-mcp auth` writes, for a stdio install.
 
-Tools call for_scopes() and never learn which mode is active, which is what lets the
-same thirteen handlers serve both deployments.
+A signed-in person never silently falls through to 2. If they have not granted the
+scope a tool needs, they are told to grant it. Falling back would hand them somebody
+else's view of the data and look like it worked, which is the exact failure this
+arrangement exists to prevent.
+
+Tools call for_scopes() and learn none of this, which is what lets the same handlers
+serve a personal install and a shared deployment.
 """
 
 from __future__ import annotations
@@ -25,8 +31,9 @@ from typing import Any, Literal
 from google.oauth2 import service_account
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import config
+from . import config, identity
 from .auth import store
+from .sso import connections
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +43,17 @@ SERVICE_ACCOUNT_JSON = "SEO_MCP_SERVICE_ACCOUNT_JSON"
 SERVICE_ACCOUNT_FILE = "SEO_MCP_SERVICE_ACCOUNT_FILE"
 
 Mode = Literal["service_account", "user"]
+
+GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
+
+# Plain names for the consent a person is missing. "webmasters.readonly" means nothing
+# to somebody being told to sign in again.
+scope_names = {
+    "https://www.googleapis.com/auth/webmasters.readonly": "Search Console",
+    "https://www.googleapis.com/auth/analytics.readonly": "Analytics",
+    "https://www.googleapis.com/auth/yt-analytics.readonly": "YouTube Analytics",
+    "https://www.googleapis.com/auth/youtube.readonly": "YouTube",
+}
 
 
 def _decode(raw: str) -> dict[str, Any]:
@@ -91,10 +109,61 @@ def service_account_email() -> str | None:
 def for_scopes(required: set[str]):
     """The credential every tool uses. Scopes are requested per call so a read tool
     never holds more authority than it needs."""
+    if subject := identity.caller():
+        return _as_person(subject, required)
     info = _service_account_info()
     if info is None:
         return store.load(config.active_profile(), required)
     return service_account.Credentials.from_service_account_info(info, scopes=sorted(required))
+
+
+def _as_person(subject: str, required: set[str]):
+    """Build a live credential for the signed-in caller, or explain what is missing."""
+    link = connections.recall(subject)
+    if link is None:
+        raise ToolError(
+            f"{subject} has not connected a Google account to this server yet, so there "
+            "is nothing to read Search Console or Analytics with. Sign out of the "
+            "connector and sign in again to grant access."
+        )
+    if not link.covers(required):
+        missing = sorted(required - set(link.scopes))
+        wanted = ", ".join(scope_names.get(s, s) for s in missing)
+        raise ToolError(
+            f"{subject} signed in before this server asked for {wanted}, so that part "
+            "is not granted yet. Sign out of the connector and sign in again - Google "
+            "will show the extra permission once, and nothing else changes."
+        )
+
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+
+    profile = config.active_profile()
+    creds = Credentials(
+        token=None,
+        refresh_token=link.refresh_token,
+        client_id=profile.google_sso_client_id,
+        client_secret=profile.google_sso_client_secret,
+        token_uri=GOOGLE_TOKEN_URI,
+        scopes=sorted(required),
+    )
+    try:
+        creds.refresh(Request())
+    except Exception as exc:
+        raise ToolError(_explain_refresh(subject, exc)) from exc
+    connections.touch(subject)
+    return creds
+
+
+def _explain_refresh(subject: str, exc: Exception) -> str:
+    text = str(exc)
+    if "invalid_grant" in text:
+        return (
+            f"Google will no longer act for {subject} (invalid_grant). Usually the "
+            "access was withdrawn at myaccount.google.com/permissions, or the password "
+            "changed. Signing in to the connector again fixes it."
+        )
+    return f"Could not use {subject}'s Google access: {text[:200]}"
 
 
 def describe() -> dict[str, Any]:

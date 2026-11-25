@@ -12,7 +12,10 @@ from typing import Any
 from .. import config, credentials, youtube_auth
 from ..auth import scopes, store
 from ..clients import ga4, gsc, linkedin, mailchimp, youtube
+from ..identity import caller
 from ..server import mcp
+from ..sso import connections
+from ..sso import google as google_sso
 from . import _base
 
 
@@ -49,6 +52,39 @@ async def auth_status() -> dict[str, Any]:
         ),
         "notes": [],
     }
+
+    # Who is asking, and what Google will do for them. With per-person credentials this
+    # is the first thing somebody needs: "authorised" is no longer a property of the
+    # server, it is a property of the person reading the answer.
+    if subject := caller():
+        link = connections.recall(subject)
+        you: dict[str, Any] = {"signed_in_as": subject}
+        if link is None:
+            you["google_connected"] = False
+            you["next_step"] = (
+                "Sign out of the connector and sign in again to grant this server "
+                "read access to your Search Console and Analytics."
+            )
+        else:
+            held = set(link.scopes)
+            you["google_connected"] = True
+            you["can_read"] = sorted(
+                name for scope, name in credentials.scope_names.items() if scope in held
+            )
+            missing = sorted(
+                name
+                for scope, name in credentials.scope_names.items()
+                if scope not in held and scope in set(google_sso.DATA_SCOPES)
+            )
+            if missing:
+                you["not_granted"] = missing
+                you["next_step"] = f"Sign in again to add {', '.join(missing)}. Google asks once."
+            you["granted_on"] = (link.updated_at or "")[:10]
+        you["note"] = (
+            "Queries run as you, so you see the properties your own Google account is "
+            "granted - not what anybody else can see."
+        )
+        out["you"] = you
 
     # Mailchimp holds its own credential, independent of the Google one. Report it
     # before any Google early-return, or configuring Mailchimp first yields silence.

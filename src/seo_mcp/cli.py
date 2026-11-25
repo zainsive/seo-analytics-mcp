@@ -483,33 +483,60 @@ def cmd_youtube_auth(args: argparse.Namespace) -> int:
     return 0
 
 
+SCOPE_NAMES = {
+    "https://www.googleapis.com/auth/webmasters.readonly": "Search Console",
+    "https://www.googleapis.com/auth/analytics.readonly": "Analytics",
+    "https://www.googleapis.com/auth/yt-analytics.readonly": "YouTube",
+}
+
+
 def cmd_people(args: argparse.Namespace) -> int:
     """Who has signed in with Google, and how to cut one of them off."""
     from .sso import store as sso
 
     if args.revoke:
-        count = sso.revoke_person(args.revoke.lower())
-        if not count:
-            _err(f"No live sign-in found for {args.revoke!r}.")
+        from .sso import connections
+
+        who = args.revoke.lower()
+        count = sso.revoke_person(who)
+        # Their stored Google grant goes too. Leaving it would mean the next sign-in
+        # silently resumed access somebody had deliberately withdrawn.
+        dropped = connections.forget(who)
+        if not count and not dropped:
+            _err(f"No sign-in or stored access found for {args.revoke!r}.")
             return 1
         _out(f"Revoked {count} token(s) for {args.revoke}.")
+        if dropped:
+            _out(f"Removed {dropped} stored platform credential(s).")
         _out("Effective on their next request. They can sign in again unless their")
         _out("Google account or the domain allowlist also changes.")
         return 0
 
+    from .sso import connections
+
+    links = {r["email"]: r for r in connections.rows() if r["platform"] == "google"}
     rows = sso.people()
     if not rows:
         _out("Nobody has signed in with Google yet.")
         _out("Static tokens are listed separately: seo-analytics-mcp token list")
         return 0
-    _out(f"{'EMAIL':<34} {'FIRST SEEN':<12} {'SESSIONS':>8}  LAST USED")
+    _out(f"{'EMAIL':<32} {'GOOGLE ACCESS':<28} {'SESSIONS':>8}  LAST USED")
     for row in rows:
+        link = links.get(row["email"])
+        if link is None:
+            access = "not granted"
+        else:
+            names = [SCOPE_NAMES.get(scope, "") for scope in link["scopes"] if scope in SCOPE_NAMES]
+            access = ", ".join(n for n in names if n) or "sign-in only"
         _out(
-            f"{row['email'][:34]:<34} {row['first_seen']:<12} "
+            f"{row['email'][:32]:<32} {access[:28]:<28} "
             f"{row['sessions']:>8}  {row['last_used'] or 'never'}"
         )
     _out("")
     _out("'sessions' is how many clients they have connected and not signed out of.")
+    _out("'google access' is what each person granted - queries run as them, so this is")
+    _out("what they can see. 'not granted' means they signed in before this server")
+    _out("asked, and need to sign in once more.")
     _out("Revoke one person:  seo-analytics-mcp people --revoke <email>")
     return 0
 
