@@ -85,6 +85,13 @@ def _sweep(conn: sqlite3.Connection) -> None:
     now = time.time()
     conn.execute("DELETE FROM sso_pending WHERE expires_at < ?", (now,))
     conn.execute("DELETE FROM sso_codes WHERE expires_at < ?", (now,))
+    # An access token is dead an hour after it is minted, but kept briefly so a
+    # rejection can still be explained rather than looking like it never existed.
+    conn.execute(
+        "DELETE FROM sso_tokens WHERE kind = 'access' AND expires_at IS NOT NULL "
+        "AND expires_at < ?",
+        (now - 86400,),
+    )
     conn.execute(
         "DELETE FROM sso_tokens WHERE expires_at IS NOT NULL AND expires_at < ?",
         (now - REFRESH_TTL,),
@@ -255,20 +262,28 @@ def revoke_person(subject: str) -> int:
 
 
 def people() -> list[dict[str, Any]]:
-    """Who has signed in, and when they were last active."""
+    """Who has signed in, and when they were last active.
+
+    "Sessions" counts refresh tokens that are neither revoked nor expired, which is one
+    per client someone has connected. It deliberately does not count access tokens: those
+    live an hour, a busy day mints dozens, and counting un-revoked rows made a healthy
+    account look like it was leaking credentials - 95 reported where 3 were usable.
+    """
+    now = time.time()
     with connect() as conn:
         rows = conn.execute(
-            "SELECT subject, COUNT(*) AS tokens, MAX(last_used) AS last_used, "
-            "MIN(created_at) AS first_seen, "
-            "SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END) AS live "
-            "FROM sso_tokens GROUP BY subject ORDER BY subject"
+            "SELECT subject, MAX(last_used) AS last_used, MIN(created_at) AS first_seen, "
+            "SUM(CASE WHEN kind = 'refresh' AND revoked_at IS NULL "
+            "         AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS sessions "
+            "FROM sso_tokens GROUP BY subject ORDER BY subject",
+            (now,),
         ).fetchall()
     return [
         {
             "email": r["subject"],
             "first_seen": (r["first_seen"] or "")[:10],
             "last_used": r["last_used"],
-            "live_tokens": r["live"],
+            "sessions": r["sessions"],
         }
         for r in rows
     ]

@@ -189,8 +189,39 @@ def test_revoking_a_person_cuts_off_every_token_they_hold():
 
 
 def test_people_lists_who_has_signed_in():
-    store.issue_token("access", client_id="c", subject=PERSON, scopes=["seo"], ttl=60)
+    store.issue_token("refresh", client_id="c", subject=PERSON, scopes=["seo"], ttl=60)
     assert [p["email"] for p in store.people()] == [PERSON]
+
+
+def test_expired_access_tokens_do_not_inflate_the_session_count():
+    """The bug this guards: counting un-revoked rows reported 95 live credentials for
+    an account with 3 usable ones. Access tokens live an hour and a busy day mints
+    dozens, so the husks have to be excluded or the number frightens whoever reads it.
+    """
+    store.issue_token("refresh", client_id="c", subject=PERSON, scopes=["seo"], ttl=600)
+    for _ in range(20):
+        store.issue_token("access", client_id="c", subject=PERSON, scopes=["seo"], ttl=-1)
+    assert store.people()[0]["sessions"] == 1
+
+
+def test_a_live_access_token_is_not_counted_as_a_session_either():
+    """One client holds one refresh token and a stream of access tokens. Counting the
+    latter would say 'sessions' and mean 'requests lately'."""
+    store.issue_token("refresh", client_id="c", subject=PERSON, scopes=["seo"], ttl=600)
+    store.issue_token("access", client_id="c", subject=PERSON, scopes=["seo"], ttl=600)
+    assert store.people()[0]["sessions"] == 1
+
+
+def test_two_connected_clients_show_as_two_sessions():
+    for client in ("claude", "cursor"):
+        store.issue_token("refresh", client_id=client, subject=PERSON, scopes=["seo"], ttl=600)
+    assert store.people()[0]["sessions"] == 2
+
+
+def test_a_revoked_person_shows_no_sessions():
+    store.issue_token("refresh", client_id="c", subject=PERSON, scopes=["seo"], ttl=600)
+    store.revoke_person(PERSON)
+    assert store.people()[0]["sessions"] == 0
 
 
 # --- the provider -------------------------------------------------------------

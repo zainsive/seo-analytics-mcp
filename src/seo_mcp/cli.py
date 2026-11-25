@@ -502,14 +502,14 @@ def cmd_people(args: argparse.Namespace) -> int:
         _out("Nobody has signed in with Google yet.")
         _out("Static tokens are listed separately: seo-analytics-mcp token list")
         return 0
-    _out(f"{'EMAIL':<34} {'FIRST SEEN':<12} {'LIVE':>5}  LAST USED")
+    _out(f"{'EMAIL':<34} {'FIRST SEEN':<12} {'SESSIONS':>8}  LAST USED")
     for row in rows:
         _out(
             f"{row['email'][:34]:<34} {row['first_seen']:<12} "
-            f"{row['live_tokens']:>5}  {row['last_used'] or 'never'}"
+            f"{row['sessions']:>8}  {row['last_used'] or 'never'}"
         )
     _out("")
-    _out("'live' counts access and refresh tokens that have not been revoked.")
+    _out("'sessions' is how many clients they have connected and not signed out of.")
     _out("Revoke one person:  seo-analytics-mcp people --revoke <email>")
     return 0
 
