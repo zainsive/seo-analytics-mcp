@@ -217,7 +217,10 @@ async def auth_status() -> dict[str, Any]:
         return out
 
     probes = [_probe("searchconsole.googleapis.com", gsc.list_sites(creds))]
-    if identity["mode"] == "service_account" or scopes.satisfies(
+    # A per-person credential is minted per call with whatever scopes are asked for,
+    # so there is no stored scope list to consult: if the person granted Analytics the
+    # probe works, and if they did not, its failure is the answer they came for.
+    if identity["mode"] in ("service_account", "per_person") or scopes.satisfies(
         identity.get("scopes_held"), {scopes.GA4_READ}
     ):
         try:
@@ -233,7 +236,7 @@ async def auth_status() -> dict[str, Any]:
     # required" here sends the operator to debug the wrong layer entirely.
     empty = [p["api"] for p in out["apis"] if p["answers"] and not p.get("visible")]
     if not broken and empty:
-        who = identity.get("service_account_email") or "the authorised account"
+        who = identity.get("grantee") or "the authorised account"
         out["next_step"] = (
             f"Authentication works and the APIs answer, but {who} can see no properties "
             f"on {', '.join(empty)}. Access is granted per property and is a separate "
@@ -247,14 +250,13 @@ async def auth_status() -> dict[str, Any]:
         )
     elif not broken:
         out["next_step"] = "Everything needed is working. No action required."
-    elif identity["mode"] == "service_account":
-        email = identity.get("service_account_email")
+    elif identity["mode"] in ("service_account", "per_person"):
         out["next_step"] = (
             f"These APIs did not answer: {', '.join(broken)}. Either the API is not "
-            "enabled on the service account's Google Cloud project, or "
-            f"{email} has not been granted access to the property. Add it under Search "
-            "Console > Settings > Users and permissions, and GA4 > Admin > Property "
-            "access management."
+            "enabled on the Google Cloud project behind this server, or "
+            f"{identity.get('grantee')} has not been granted access to the property. "
+            "Add that account under Search Console > Settings > Users and permissions, "
+            "and GA4 > Admin > Property access management."
         )
     else:
         out["next_step"] = (

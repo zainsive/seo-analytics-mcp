@@ -63,9 +63,13 @@ class Ctx:
     property_id: str | None = None
     scope_needed: str | None = None
     api: str | None = None
-    # Set in service-account deployments. "Re-authorise" is useless advice there -
-    # the fix is granting this email access to the property.
-    service_account_email: str | None = None
+    # Whose access actually matters for this call: the signed-in person, when queries
+    # run as them, and otherwise the service account. "Re-authorise" is useless advice
+    # in either case - the fix is granting THIS identity access to the property. Naming
+    # the wrong one is worse than naming nobody, because it sends somebody off to grant
+    # access to an account that is not the one being used.
+    grantee: str | None = None
+    grantee_is_person: bool = False
 
 
 def _status(exc: Exception) -> int | None:
@@ -225,9 +229,19 @@ def translate(exc: Exception, ctx: Ctx) -> ToolError:
                 f"`{REAUTH} --enable-writes` to grant it. Read-only scopes are the default "
                 "on purpose."
             )
-        if ctx.service_account_email:
+        if ctx.grantee and ctx.grantee_is_person:
             return ToolError(
-                f"The service account {ctx.service_account_email} has no access to {target}. "
+                f"Your Google account {ctx.grantee} has no access to {target}. Queries "
+                "run as you, so this is about your own access rather than the server's: "
+                "signing in again will not change it. Search Console grants are per "
+                "property under Settings > Users and permissions, and GA4 grants under "
+                f"Admin > Property access management. Ask whoever administers {target} "
+                "to add you - Viewer is enough to read, and Search Console needs Full "
+                "for URL inspection. It applies within a minute."
+            )
+        if ctx.grantee:
+            return ToolError(
+                f"The service account {ctx.grantee} has no access to {target}. "
                 "Granting access is a separate step from deploying: add that email as a user "
                 "in Search Console under Settings > Users and permissions (Full, if URL "
                 "inspection is needed), and in GA4 under Admin > Property access management "

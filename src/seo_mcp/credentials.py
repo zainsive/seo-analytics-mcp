@@ -167,7 +167,37 @@ def _explain_refresh(subject: str, exc: Exception) -> str:
 
 
 def describe() -> dict[str, Any]:
-    """What auth_status and doctor report. Never includes key material."""
+    """What auth_status and doctor report. Never includes key material.
+
+    Two questions are asked here, and they stopped having the same answer when
+    queries began running as the person asking: how this server is configured, and
+    what the caller can actually read. Reporting only the first would tell a
+    signed-in person "authorised: true" while every one of their queries refuses,
+    which is backwards for the one tool whose job is explaining what went wrong.
+
+    `grantee` is the answer to "who needs to be added to the property", which is a
+    different identity depending on who is calling. Getting it wrong sends somebody
+    to grant access to an account that is not the one being used.
+    """
+    subject = identity.caller()
+    if subject is None:
+        return _server_credential()
+    return {
+        "mode": "per_person",
+        "authorised": connections.recall(subject) is not None,
+        "grantee": subject,
+        "note": (
+            f"Queries run as {subject}, so what can be read is whatever that Google "
+            "account is granted - not what this server, or anybody else using it, can "
+            "see. The server's own credential is reported separately and is used only "
+            "for callers that are not people, such as a hand-issued token."
+        ),
+        "server_credential": _server_credential(),
+    }
+
+
+def _server_credential() -> dict[str, Any]:
+    """The credential the server itself holds, for callers who are not people."""
     info = _service_account_info()
     if info is None:
         profile = config.active_profile()
@@ -181,6 +211,7 @@ def describe() -> dict[str, Any]:
         "mode": "service_account",
         "service_account_email": info.get("client_email"),
         "project_id": info.get("project_id"),
+        "grantee": info.get("client_email"),
         "authorised": True,
         "note": (
             "Access comes from a service account, so it reads exactly the properties "

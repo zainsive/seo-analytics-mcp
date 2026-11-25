@@ -60,10 +60,18 @@ def google_tool(*, api: str, scope: str | None = None) -> Callable[[Callable], C
                 property_id = property_id or profile.default_property
             except ToolError:  # an invalid SEO_MCP_PROFILE must still report itself
                 pass
+            # Whose access the error should name. A signed-in person's query runs as
+            # them, so a 403 is about their own grant; naming the service account there
+            # would send them to add an email that has nothing to do with their call.
+            is_person = False
             try:
                 from .. import credentials
+                from ..identity import caller
 
-                email = credentials.service_account_email()
+                if who := caller():
+                    email, is_person = who, True
+                else:
+                    email = credentials.service_account_email()
             except Exception:  # a broken credential is reported by the call itself
                 pass
             ctx = Ctx(
@@ -72,7 +80,8 @@ def google_tool(*, api: str, scope: str | None = None) -> Callable[[Callable], C
                 scope_needed=scope,
                 site_url=site_url,
                 property_id=property_id,
-                service_account_email=email,
+                grantee=email,
+                grantee_is_person=is_person,
             )
             try:
                 return await fn(*a, **kw)

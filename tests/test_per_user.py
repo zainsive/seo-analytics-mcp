@@ -136,3 +136,52 @@ def test_an_anonymous_caller_still_uses_the_servers_own_credential(monkeypatch, 
     )
     credentials.for_scopes({scopes.GSC_READ})
     assert captured["required"] == {scopes.GSC_READ}
+
+
+async def test_a_403_for_a_signed_in_person_names_them_not_the_service_account():
+    """The likeliest failure after per-person access ships: the person granted the
+    scope but was never added to the property. Telling them to grant access to the
+    service account sends them to fix something that is not in their way."""
+    import json as _json
+
+    import httplib2
+    from googleapiclient.errors import HttpError
+
+    from seo_mcp.errors import Ctx, translate
+
+    exc = HttpError(
+        httplib2.Response({"status": 403}),
+        _json.dumps({"error": {"code": 403, "errors": [{"reason": "forbidden"}]}}).encode(),
+        uri="u",
+    )
+    message = str(
+        translate(
+            exc,
+            Ctx(
+                site_url="sc-domain:example.com",
+                grantee="bob@example.com",
+                grantee_is_person=True,
+            ),
+        )
+    )
+    assert "bob@example.com has no access to sc-domain:example.com" in message
+    assert "service account" not in message
+    # Signing in again is the fix for a missing scope and useless for a missing grant.
+    # Confusing the two is how somebody loops through consent screens for an hour.
+    assert "signing in again will not change it" in message.lower()
+
+
+async def test_auth_status_reports_the_caller_as_the_one_who_needs_the_grant(monkeypatch):
+    """describe() answers "who needs adding to the property". With a person calling,
+    that is the person - even on a server that holds a service account."""
+    from seo_mcp import credentials
+
+    monkeypatch.setattr(credentials.identity, "caller", lambda: "bob@example.com")
+    monkeypatch.setattr(credentials.connections, "recall", lambda subject, **kw: None)
+
+    described = credentials.describe()
+    assert described["mode"] == "per_person"
+    assert described["grantee"] == "bob@example.com"
+    # The headline must not claim access the caller does not have.
+    assert described["authorised"] is False
+    assert "bob@example.com" in described["note"]
