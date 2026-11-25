@@ -117,6 +117,19 @@ def for_scopes(required: set[str]):
     return service_account.Credentials.from_service_account_info(info, scopes=sorted(required))
 
 
+def names_for(required) -> str:
+    """Plain product names, listed the way a person would say them.
+
+    "YouTube, YouTube Analytics" is what joining with commas produces, and it reads
+    like a truncated list rather than a sentence; these strings only ever appear in
+    front of somebody whose query just failed.
+    """
+    names = sorted({scope_names.get(s, s) for s in required})
+    if len(names) <= 1:
+        return names[0] if names else "anything"
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
 def as_person(subject: str, required: set[str]):
     """Build a live credential for one named person, or explain what is missing.
 
@@ -129,15 +142,14 @@ def as_person(subject: str, required: set[str]):
         # Name what was actually asked for. A YouTube question answered with "nothing
         # to read Search Console with" reads as the server having lost track of the
         # question, which is a worse impression than the real problem.
-        wanted = ", ".join(scope_names.get(s, s) for s in sorted(required))
+        wanted = names_for(required)
         raise ToolError(
             f"{subject} has not connected a Google account to this server yet, so there "
             f"is nothing to read {wanted} with. Sign out of the connector and sign in "
             "again to grant access."
         )
     if not link.covers(required):
-        missing = sorted(required - set(link.scopes))
-        wanted = ", ".join(scope_names.get(s, s) for s in missing)
+        wanted = names_for(required - set(link.scopes))
         raise ToolError(
             f"{subject} signed in before this server asked for {wanted}, so that part "
             "is not granted yet. Sign out of the connector and sign in again - Google "

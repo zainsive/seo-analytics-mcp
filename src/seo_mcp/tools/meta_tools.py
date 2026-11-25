@@ -61,9 +61,7 @@ async def auth_status() -> dict[str, Any]:
         you: dict[str, Any] = {"signed_in_as": subject}
         if link is None:
             you["google_connected"] = False
-            everything = ", ".join(
-                credentials.scope_names.get(s, s) for s in google_sso.DATA_SCOPES
-            )
+            everything = credentials.names_for(google_sso.DATA_SCOPES)
             you["next_step"] = (
                 "Sign out of the connector and sign in again to grant this server read "
                 f"access to your {everything}. Google asks once, for all of them."

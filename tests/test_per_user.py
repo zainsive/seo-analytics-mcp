@@ -400,3 +400,12 @@ async def test_the_not_connected_message_names_what_was_actually_asked_for(monke
     search = str(pytest.raises(ToolError, credentials.as_person, ALICE, {scopes.GSC_READ}).value)
     assert "Search Console" in search
     assert "YouTube" not in search
+
+
+def test_missing_access_is_listed_the_way_a_person_would_say_it():
+    from seo_mcp.auth import scopes as s
+
+    assert credentials.names_for({s.GSC_READ}) == "Search Console"
+    assert credentials.names_for({s.GSC_READ, s.GA4_READ}) == "Analytics and Search Console"
+    assert credentials.names_for(s.for_youtube()) == "YouTube and YouTube Analytics"
+    assert credentials.names_for(set()) == "anything"
