@@ -22,6 +22,8 @@ from . import __version__, cache, config, credentials, env
 from .auth import scopes, store
 from .clients import ga4, gsc, indexnow
 from .errors import Ctx, translate
+from .sso import google as google_sso
+from .sso import vault
 
 CONSOLE_WALKTHROUGH = """\
 No OAuth client secret found for profile '{profile}'.
@@ -127,6 +129,17 @@ def _check(name: str, ok: bool | None, detail: str) -> dict[str, Any]:
 async def _doctor(profile: config.Profile) -> list[dict[str, Any]]:
     checks: list[dict[str, Any]] = []
 
+    # A hosted deployment has no client secret, no stored token and no browser to open
+    # one with. Running the local-install checks against it reported two failures and
+    # "the server will not work until they pass" on a server that was working, then
+    # printed a Google Cloud walkthrough that would not have helped - all of it on the
+    # machine somebody would be sitting at precisely because something had gone wrong.
+    # The API probes and the tail below are shared: what differs is only where the
+    # credential comes from.
+    if credentials.mode() == "service_account":
+        checks, creds, held = _hosted_credential_checks()
+        return checks + await _doctor_apis(profile, creds, held)
+
     # 1-2. client secret present, and of the right type
     if not profile.client_path.exists():
         checks.append(
@@ -202,6 +215,80 @@ async def _doctor(profile: config.Profile) -> list[dict[str, Any]]:
                 "so the OAuth app is published and refresh tokens persist.",
             )
         )
+
+    return checks + await _doctor_apis(profile, creds, held)
+
+
+def _hosted_credential_checks() -> tuple[list[dict[str, Any]], Any, set[str]]:
+    """Checks for a server that authenticates with a key rather than a browser.
+
+    Returns the checks plus the credential and scopes the API probes should use, so
+    that half of the diagnosis is identical however the server is authenticated.
+    """
+    checks: list[dict[str, Any]] = []
+    held = set(scopes.for_read())
+    creds = None
+
+    try:
+        described = credentials.describe()
+        checks.append(_check("service account", True, str(described["service_account_email"])))
+        checks.append(_check("cloud project", True, str(described.get("project_id"))))
+    except Exception as exc:
+        checks.append(_check("service account", False, f"{type(exc).__name__}: {exc}"[:220]))
+        checks.append(_check("cloud project", None, "skipped - the key could not be read"))
+        return checks, None, set()
+
+    try:
+        creds = credentials.for_scopes(held)
+        checks.append(_check("credential", True, "the key loads and signs"))
+    except Exception as exc:
+        checks.append(_check("credential", False, f"{type(exc).__name__}: {exc}"[:220]))
+
+    # Google sign-in, and the key that makes a person's grant storable. Sign-in without
+    # that key is the quiet failure worth a check of its own: everybody authenticates
+    # successfully, and then nothing can be kept, so it presents as consent being
+    # broken rather than as one unset environment variable.
+    if not google_sso.configured():
+        checks.append(
+            _check(
+                "google sign-in",
+                None,
+                "not configured - every caller uses the service account's access. Set "
+                "GOOGLE_SSO_CLIENT_ID and GOOGLE_SSO_CLIENT_SECRET to have people sign "
+                "in and read only what their own account is granted.",
+            )
+        )
+    else:
+        policy = google_sso.allowed_domains() + google_sso.allowed_emails()
+        checks.append(
+            _check(
+                "google sign-in",
+                bool(policy),
+                f"admits {', '.join(policy)}"
+                if policy
+                else "ON with no policy, so it admits nobody. Set "
+                "GOOGLE_SSO_ALLOWED_DOMAINS to the company domain.",
+            )
+        )
+        checks.append(
+            _check(
+                "credential key",
+                vault.configured(),
+                "set, so each person's Google grant can be stored"
+                if vault.configured()
+                else f"MISSING. People can sign in, but no grant can be stored, so "
+                f"every Google query will refuse. {vault.HOW_TO_SET}",
+            )
+        )
+
+    return checks, creds, held
+
+
+async def _doctor_apis(
+    profile: config.Profile, creds: Any, held: set[str] | list[str]
+) -> list[dict[str, Any]]:
+    """Whether the APIs answer, plus the environment summary. Shared by both modes."""
+    checks: list[dict[str, Any]] = []
 
     # 7-9. do the APIs actually answer
     if creds is not None:
@@ -288,14 +375,20 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             )
         )
     else:
+        hosted = credentials.mode() == "service_account"
         _out(f"seo-analytics-mcp {__version__} - profile '{profile.name}'\n")
         for c in checks:
             mark = {True: "PASS", False: "FAIL", None: "----"}[c["ok"]]
             _out(f"  [{mark}] {c['check']:<20} {c['detail']}")
         if failed:
             _out(f"\n{len(failed)} check(s) failed. The server will not work until they pass.")
-            if not store.has_token(profile) and not profile.client_path.exists():
+            # The walkthrough sets up a Desktop OAuth client for the browser flow. On a
+            # hosted server there is no browser and no client secret by design, so its
+            # absence is not the fault and following six screens of it fixes nothing.
+            if not hosted and not store.has_token(profile) and not profile.client_path.exists():
                 _out("\n" + CONSOLE_WALKTHROUGH.format(profile=profile.name))
+        elif hosted:
+            _out("\nAll checks passed.")
         else:
             _out("\nAll checks passed. Add the server to your MCP client config:")
             _out(f"  claude mcp add seo -e SEO_MCP_PROFILE={profile.name} -- uvx seo-mcp")

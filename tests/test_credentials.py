@@ -10,28 +10,6 @@ from seo_mcp import config, credentials, env
 from seo_mcp.auth import scopes
 
 
-@pytest.fixture
-def key_info():
-    """A real RSA key, generated here - never a fixture checked into the repo."""
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    pem = key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    ).decode()
-    return {
-        "type": "service_account",
-        "project_id": "demo",
-        "client_email": "seo-reader@demo.iam.gserviceaccount.com",
-        "private_key": pem,
-        "private_key_id": "k1",
-        "token_uri": "https://oauth2.googleapis.com/token",
-    }
-
-
 def test_user_mode_is_the_default_so_local_installs_are_unaffected():
     assert credentials.mode() == "user"
     assert credentials.describe()["mode"] == "user"

@@ -185,3 +185,85 @@ async def test_auth_status_reports_the_caller_as_the_one_who_needs_the_grant(mon
     # The headline must not claim access the caller does not have.
     assert described["authorised"] is False
     assert "bob@example.com" in described["note"]
+
+
+def _as_hosted(monkeypatch, key_info):
+    """Make the process look like the deployed server: a service-account key, no
+    client secret and no stored token.
+
+    The API probes are stubbed out. They are shared with the local-install path and
+    tested there, and left live they would have this suite calling Google over the
+    network to find out whether a generated throwaway key can read Search Console.
+    """
+    import json as _json
+
+    from seo_mcp import cli, credentials
+
+    monkeypatch.setenv(credentials.SERVICE_ACCOUNT_JSON, _json.dumps(key_info))
+    monkeypatch.delenv(credentials.SERVICE_ACCOUNT_FILE, raising=False)
+
+    async def no_probes(profile, creds, held):
+        return []
+
+    monkeypatch.setattr(cli, "_doctor_apis", no_probes)
+
+
+async def test_doctor_does_not_tell_a_working_hosted_server_it_is_broken(monkeypatch, key_info):
+    """doctor ran the local-install checks unconditionally, so on the deployed server
+    it reported "no client secret", "no token stored" and "the server will not work
+    until they pass" - on a server that was serving fine at that moment."""
+    from seo_mcp import cli, config
+
+    _as_hosted(monkeypatch, key_info)
+    checks = await cli._doctor(config.active_profile())
+    names = {c["check"] for c in checks}
+
+    assert "client secret" not in names
+    assert "token" not in names
+    assert "service account" in names
+    detail = next(c["detail"] for c in checks if c["check"] == "service account")
+    assert detail == key_info["client_email"]
+
+
+async def test_doctor_fails_when_sign_in_is_on_but_nothing_can_be_stored(monkeypatch, key_info):
+    """The quiet one. Google sign-in works, people consent happily, and then every
+    grant fails to store because no encryption key is set - so it presents as consent
+    being broken rather than as one unset variable."""
+    from seo_mcp import cli, config
+    from seo_mcp.sso import vault
+
+    _as_hosted(monkeypatch, key_info)
+    monkeypatch.setenv("GOOGLE_SSO_CLIENT_ID", "cid")
+    monkeypatch.setenv("GOOGLE_SSO_CLIENT_SECRET", "csecret")
+    monkeypatch.setenv("GOOGLE_SSO_ALLOWED_DOMAINS", "example.com")
+    monkeypatch.delenv(vault.KEY_VAR, raising=False)
+
+    checks = await cli._doctor(config.active_profile())
+    key_check = next(c for c in checks if c["check"] == "credential key")
+    assert key_check["ok"] is False
+    assert "no grant can be stored" in key_check["detail"]
+
+    # And with the key set, it passes.
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setenv(vault.KEY_VAR, Fernet.generate_key().decode())
+    vault._cipher.cache_clear()
+    checks = await cli._doctor(config.active_profile())
+    assert next(c for c in checks if c["check"] == "credential key")["ok"] is True
+
+
+async def test_doctor_flags_sign_in_left_without_a_policy(monkeypatch, key_info):
+    """Sign-in with no domain and no allowlist admits nobody, which is the safe
+    failure - but it should be visible rather than discovered by a confused teammate."""
+    from seo_mcp import cli, config
+
+    _as_hosted(monkeypatch, key_info)
+    monkeypatch.setenv("GOOGLE_SSO_CLIENT_ID", "cid")
+    monkeypatch.setenv("GOOGLE_SSO_CLIENT_SECRET", "csecret")
+    monkeypatch.delenv("GOOGLE_SSO_ALLOWED_DOMAINS", raising=False)
+    monkeypatch.delenv("GOOGLE_SSO_ALLOWED_EMAILS", raising=False)
+
+    checks = await cli._doctor(config.active_profile())
+    policy = next(c for c in checks if c["check"] == "google sign-in")
+    assert policy["ok"] is False
+    assert "admits nobody" in policy["detail"]
