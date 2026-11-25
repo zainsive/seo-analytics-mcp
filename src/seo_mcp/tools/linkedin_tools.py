@@ -12,25 +12,64 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from .. import cache, config
 from ..clients import linkedin
+from ..identity import caller
 from ..server import mcp
 from ..shaping import DateRangeError, ShapedResponse, resolve_date, shape
+from ..sso import connections
 from . import _base
 
 TTL = 3 * 3600  # LinkedIn recomputes statistics slowly; a stale hour costs nothing
 
 
 def _token() -> str:
-    token = config.active_profile().linkedin_token
-    if not token:
-        raise ToolError(
-            "No LinkedIn access token is configured. Create an app at "
-            "developer.linkedin.com, request the Community Management API product, then "
-            "authorise a member who administers the Page and set LINKEDIN_ACCESS_TOKEN "
-            "in the server's environment. The token is never passed as a tool argument, "
-            "because tool arguments are visible in the transcript. Note that LinkedIn "
-            "tokens expire after about 60 days and must be replaced by hand."
-        )
-    return token
+    """Whose LinkedIn this reads, and the one place that decides.
+
+    The person's own connection first, then the shared token. LinkedIn differs from
+    Mailchimp in one way that matters here: reading a Page's statistics at all requires
+    an ADMINISTRATOR role on that Page, so most people's own connection will see
+    nothing. That is the honest answer rather than a fault, and it is better than
+    showing them an admin's view and letting them believe it is theirs.
+    """
+    subject = caller()
+    if subject:
+        if link := connections.recall(subject, connections.LINKEDIN):
+            connections.touch(subject, connections.LINKEDIN)
+            return link.refresh_token
+    if token := config.active_profile().linkedin_token:
+        return token
+    raise ToolError(
+        f"No LinkedIn account is connected for {subject}, and this server holds no "
+        "shared token either. Call connect_account with 'linkedin' to connect your "
+        "own - note that reading a Page's statistics needs an ADMINISTRATOR role on "
+        "that Page, so connecting is not by itself enough."
+        if subject
+        else "No LinkedIn access token is configured. Create an app at "
+        "developer.linkedin.com, request the Community Management API product, then "
+        "authorise a member who administers the Page and set LINKEDIN_ACCESS_TOKEN "
+        "in the server's environment. The token is never passed as a tool argument, "
+        "because tool arguments are visible in the transcript. Note that LinkedIn "
+        "tokens expire after about 60 days and must be replaced by hand."
+    )
+
+
+def _notes() -> list[str]:
+    """Said only when it would otherwise mislead - see the same helper in
+    mailchimp_tools for why silence is right in the other two cases."""
+    subject = caller()
+    if subject is None or connections.recall(subject, connections.LINKEDIN):
+        return []
+    return [
+        "Read through this server's shared LinkedIn token rather than your own login. "
+        "Call connect_account with 'linkedin' to read as yourself instead."
+    ]
+
+
+def _tag(token: str) -> str:
+    """Folded into the cache key, so connecting your own account part-way through a
+    conversation cannot be answered from the shared token's cached rows."""
+    from ..sso import store
+
+    return store.digest(token)[:12]
 
 
 def _version() -> str:
@@ -74,7 +113,7 @@ async def linkedin_list_organizations() -> dict[str, Any]:
     """
     profile = config.active_profile()
     token, version = _token(), _version()
-    ck = cache.key(profile, "linkedin.orgs", {"version": version})
+    ck = cache.key(profile, "linkedin.orgs", {"version": version, "cred": _tag(token)})
 
     async def producer():
         from ..shaping import QueryResult
@@ -108,7 +147,8 @@ async def linkedin_list_organizations() -> dict[str, Any]:
     return {
         "organizations": result.rows,
         "count": len(result.rows),
-        "notes": notes
+        "notes": _notes()
+        + notes
         + [
             "'followers' is the current running total. Followers gained over a period "
             "come from linkedin_follower_stats instead.",
@@ -134,7 +174,9 @@ async def linkedin_share_stats(
     start, end = _window(start_date, end_date)
     token, version = _token(), _version()
     ck = cache.key(
-        profile, "linkedin.shares", {"org": org, "start": start, "end": end, "version": version}
+        profile,
+        "linkedin.shares",
+        {"org": org, "start": start, "end": end, "version": version, "cred": _tag(token)},
     )
     result = await cache.get_or_set(
         profile,
@@ -142,7 +184,7 @@ async def linkedin_share_stats(
         ttl=TTL,
         producer=lambda: linkedin.share_stats(token, org, version=version, start=start, end=end),
     )
-    return shape(result, top_n=400, export_dir=_base.export_dir(profile))
+    return shape(result, top_n=400, export_dir=_base.export_dir(profile), notes=_notes())
 
 
 @mcp.tool(annotations=_base.READ_ONLY)
@@ -162,7 +204,9 @@ async def linkedin_follower_stats(
     start, end = _window(start_date, end_date)
     token, version = _token(), _version()
     ck = cache.key(
-        profile, "linkedin.followers", {"org": org, "start": start, "end": end, "version": version}
+        profile,
+        "linkedin.followers",
+        {"org": org, "start": start, "end": end, "version": version, "cred": _tag(token)},
     )
     result = await cache.get_or_set(
         profile,
@@ -170,7 +214,9 @@ async def linkedin_follower_stats(
         ttl=TTL,
         producer=lambda: linkedin.follower_stats(token, org, version=version, start=start, end=end),
     )
-    return shape(result, top_n=400, sort_by=None, export_dir=_base.export_dir(profile))
+    return shape(
+        result, top_n=400, sort_by=None, export_dir=_base.export_dir(profile), notes=_notes()
+    )
 
 
 @mcp.tool(annotations=_base.READ_ONLY)
@@ -191,7 +237,9 @@ async def linkedin_page_stats(
     start, end = _window(start_date, end_date)
     token, version = _token(), _version()
     ck = cache.key(
-        profile, "linkedin.page", {"org": org, "start": start, "end": end, "version": version}
+        profile,
+        "linkedin.page",
+        {"org": org, "start": start, "end": end, "version": version, "cred": _tag(token)},
     )
     result = await cache.get_or_set(
         profile,
@@ -199,4 +247,6 @@ async def linkedin_page_stats(
         ttl=TTL,
         producer=lambda: linkedin.page_stats(token, org, version=version, start=start, end=end),
     )
-    return shape(result, top_n=100, sort_by="views", export_dir=_base.export_dir(profile))
+    return shape(
+        result, top_n=100, sort_by="views", export_dir=_base.export_dir(profile), notes=_notes()
+    )

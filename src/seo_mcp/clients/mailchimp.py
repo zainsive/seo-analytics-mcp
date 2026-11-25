@@ -59,8 +59,41 @@ def data_center(key: str) -> str:
     return dc
 
 
-def _base(key: str) -> str:
-    return f"https://{data_center(key)}.api.{API}/{VERSION}"
+@dataclass(frozen=True)
+class Access:
+    """What a request is made with, and where to send it.
+
+    An API key carries its data centre as a '-us15' suffix, so the hostname can be
+    derived from the key itself. An OAuth token carries nothing: the data centre comes
+    from a separate metadata call at connect time and has to be remembered alongside
+    it. Keeping both in one object is what stops every function here having to know
+    which kind it was handed.
+    """
+
+    token: str
+    data_center: str
+    oauth: bool = False
+
+    @classmethod
+    def from_api_key(cls, key: str) -> Access:
+        return cls(token=key, data_center=data_center(key), oauth=False)
+
+    @classmethod
+    def from_oauth(cls, token: str, data_center_: str) -> Access:
+        if not data_center_:
+            raise ToolError(
+                "This Mailchimp connection has no data centre recorded, so no request "
+                "can be addressed. Connect the account again."
+            )
+        return cls(token=token, data_center=data_center_, oauth=True)
+
+    @property
+    def base(self) -> str:
+        return f"https://{self.data_center}.api.{API}/{VERSION}"
+
+
+def _base(access: Access) -> str:
+    return access.base
 
 
 def _fail(response: httpx.Response) -> ToolError:
@@ -100,17 +133,21 @@ def _fail(response: httpx.Response) -> ToolError:
     return ToolError(f"Mailchimp rejected the request ({status}): {detail or 'no detail given'}")
 
 
-async def _get(key: str, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+async def _get(access: Access, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    url = f"{access.base}{path}"
+    # An API key goes in Basic auth with any username; an OAuth token is a bearer
+    # token. Sending a bearer token as a password authenticates as nobody.
+    kwargs: dict[str, Any] = (
+        {"headers": {"Authorization": f"Bearer {access.token}"}}
+        if access.oauth
+        else {"auth": ("seo-analytics-mcp", access.token)}
+    )
     async with _GATE:
         async with httpx.AsyncClient(timeout=25) as client:
             try:
-                r = await client.get(
-                    f"{_base(key)}{path}",
-                    params=params,
-                    auth=("seo-analytics-mcp", key),  # Basic: any username, key as password
-                )
+                r = await client.get(url, params=params, **kwargs)
             except httpx.HTTPError as exc:
-                raise ToolError(f"Could not reach Mailchimp at {_base(key)}{path}: {exc}") from exc
+                raise ToolError(f"Could not reach Mailchimp at {url}: {exc}") from exc
     if r.status_code >= 400:
         raise _fail(r)
     try:
@@ -119,21 +156,21 @@ async def _get(key: str, path: str, params: dict[str, Any] | None = None) -> dic
         raise ToolError(f"Mailchimp returned a non-JSON response: {r.text[:160]}") from exc
 
 
-async def ping(key: str) -> Account:
+async def ping(access: Access) -> Account:
     """Cheapest possible credential check, and the only call auth_status needs."""
-    await _get(key, "/ping")
-    root = await _get(key, "/", {"fields": "account_name,email,total_subscribers"})
+    await _get(access, "/ping")
+    root = await _get(access, "/", {"fields": "account_name,email,total_subscribers"})
     return Account(
         account_name=root.get("account_name") or "unknown",
         email=root.get("email") or "unknown",
         total_subscribers=root.get("total_subscribers"),
-        data_center=data_center(key),
+        data_center=access.data_center,
     )
 
 
-async def list_audiences(key: str) -> QueryResult:
+async def list_audiences(access: Access) -> QueryResult:
     payload = await _get(
-        key,
+        access,
         "/lists",
         {
             "count": PAGE_MAX,
@@ -177,7 +214,7 @@ async def list_audiences(key: str) -> QueryResult:
 
 
 async def list_campaigns(
-    key: str, *, since: str | None = None, before: str | None = None, limit: int = 50
+    access: Access, *, since: str | None = None, before: str | None = None, limit: int = 50
 ) -> QueryResult:
     params: dict[str, Any] = {
         "count": max(1, min(limit, PAGE_MAX)),
@@ -195,7 +232,7 @@ async def list_campaigns(
     if before:
         params["before_send_time"] = f"{before}T23:59:59+00:00"
 
-    payload = await _get(key, "/campaigns", params)
+    payload = await _get(access, "/campaigns", params)
     rows = []
     for item in payload.get("campaigns", []):
         summary = item.get("report_summary") or {}
@@ -230,8 +267,8 @@ async def list_campaigns(
     )
 
 
-async def campaign_report(key: str, campaign_id: str) -> dict[str, Any]:
-    report = await _get(key, f"/reports/{campaign_id}")
+async def campaign_report(access: Access, campaign_id: str) -> dict[str, Any]:
+    report = await _get(access, f"/reports/{campaign_id}")
     opens = report.get("opens") or {}
     clicks = report.get("clicks") or {}
     bounces = report.get("bounces") or {}
@@ -267,7 +304,7 @@ def _same_site(host: str, site_host: str) -> bool:
 
 
 async def campaign_links(
-    key: str, campaign_id: str, *, limit: int = 100, site_host: str | None = None
+    access: Access, campaign_id: str, *, limit: int = 100, site_host: str | None = None
 ) -> QueryResult:
     """Which links recipients clicked, with on-site links carrying a joinable path.
 
@@ -278,7 +315,7 @@ async def campaign_links(
     unrelated pages of the site, and against its homepage.
     """
     payload = await _get(
-        key,
+        access,
         f"/reports/{campaign_id}/click-details",
         {"count": max(1, min(limit, PAGE_MAX)), "sort_field": "total_clicks", "sort_dir": "DESC"},
     )

@@ -87,6 +87,7 @@ def sign_in_enabled() -> bool:
 # Tool modules register themselves on import. This has to happen after `mcp` exists,
 # which is why the imports sit at the bottom of the module.
 from .tools import composite as _composite  # noqa: E402,F401
+from .tools import connect_tools as _connect_tools  # noqa: E402,F401
 from .tools import ga4_tools as _ga4_tools  # noqa: E402,F401
 from .tools import gsc_tools as _gsc_tools  # noqa: E402,F401
 from .tools import indexnow_tools as _indexnow_tools  # noqa: E402,F401
@@ -149,6 +150,63 @@ async def google_callback(request):
         log.exception("sign-in failed")
         return refuse("Something went wrong completing the sign-in. Please try again.", 500)
     return RedirectResponse(destination, status_code=302)
+
+
+@mcp.custom_route("/auth/connect/callback", ["GET"])
+async def connect_callback(request):
+    """Where Mailchimp or LinkedIn returns somebody who has approved a hand-over.
+
+    Deliberately takes nothing about who this is from the request. The subject was
+    written into the parked state while they were authenticated over MCP; this URL is
+    unauthenticated, so reading an email from a query parameter here would let anyone
+    attach an account to somebody else's name.
+    """
+    from starlette.responses import HTMLResponse
+
+    from .sso import link, platforms
+
+    log = logging.getLogger("seo_mcp")
+
+    def page(title: str, message: str, status: int = 200):
+        return HTMLResponse(
+            _PAGE.format(
+                title=title,
+                body=f"<p>{message}</p><p class='m'>You can close this tab.</p>",
+            ),
+            status_code=status,
+        )
+
+    if error := request.query_params.get("error"):
+        log.warning("platform connect returned %s", error)
+        description = request.query_params.get("error_description") or ""
+        return page(
+            "Not connected",
+            "That account was not connected. If you chose Cancel or Deny, start again "
+            f"from your AI tool. {description}".strip(),
+            status=400,
+        )
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    if not code or not state:
+        return page(
+            "Not connected",
+            "That link is incomplete. Start again from your AI tool.",
+            status=400,
+        )
+
+    try:
+        message = await link.finish(state, code)
+    except platforms.LinkRefused as exc:
+        log.warning("platform connect refused: %s", exc)
+        return page("Not connected", str(exc), status=400)
+    except Exception:
+        log.exception("platform connect failed")
+        return page(
+            "Not connected",
+            "Something went wrong finishing the connection. Please try again.",
+            status=500,
+        )
+    return page("Connected", message)
 
 
 @mcp.custom_route("/healthz", ["GET"])
@@ -284,6 +342,19 @@ def serve_http(host: str = "127.0.0.1", port: int = 8080) -> None:
         log.warning(
             "%d client(s) registered; static tokens still accepted alongside sign-in",
             sso_store.client_count(),
+        )
+        # Printed because the setup instructions in the connect flow tell people to
+        # copy it from here, and because each platform demands it verbatim.
+        from .sso import link as sso_link
+        from .sso import platforms as sso_platforms
+
+        ready = sso_link.available()
+        waiting = sorted(set(sso_platforms.ALL) - set(ready))
+        log.warning(
+            "connect redirect URI: %s | ready: %s | not configured: %s",
+            sso_link.redirect_uri(),
+            ", ".join(ready) or "none",
+            ", ".join(waiting) or "none",
         )
         resolve, token_summary = None, None
     else:

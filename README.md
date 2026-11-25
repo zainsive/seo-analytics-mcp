@@ -177,8 +177,9 @@ common issue filed against it.
 
 ## Tools
 
-Twenty-five tools: twenty-two map to upstream operations, two join sources, and one
-exists purely so the model can tell a confused user what to do.
+Twenty-six tools: twenty-two map to upstream operations, two join sources, one hands
+somebody a link to connect their own account, and one exists purely so the model can
+tell a confused user what to do.
 
 | | Tool | What it does |
 |:--|:--|:--|
@@ -206,6 +207,7 @@ exists purely so the model can tell a confused user what to do.
 | 📺 | `youtube_channel_report` | Watch time, view duration and subscriber movement |
 | 📺 | `youtube_traffic_sources` | Where views came from — search, suggested, external |
 | 🔗 | `page_report` | One URL: GSC trend, top queries, GA4 engagement, index status |
+| 🔑 | `connect_account` | A link to attach your own Mailchimp or LinkedIn, read as you |
 | 🩺 | `auth_status` | Active profile, scopes, which APIs answer, what to run next |
 
 <br>
@@ -269,8 +271,10 @@ Every variable is optional. Precedence: **tool argument → environment → prof
 | `SEO_MCP_PROFILE` | Which profile to use (default: `default`) |
 | `SEO_MCP_HOME` | Override the profile root directory |
 | `INDEXNOW_HOST` · `INDEXNOW_KEY` | Required only for IndexNow |
-| `MAILCHIMP_API_KEY` | Required only for the Mailchimp tools. The suffix (`-us15`) selects the data centre |
-| `LINKEDIN_ACCESS_TOKEN` | Required only for the LinkedIn tools. A member token, not an app key — see below |
+| `MAILCHIMP_API_KEY` | Shared fallback for the Mailchimp tools. The suffix (`-us15`) selects the data centre |
+| `MAILCHIMP_CLIENT_ID` · `MAILCHIMP_CLIENT_SECRET` | A registered Mailchimp app, so each person connects their own account |
+| `LINKEDIN_ACCESS_TOKEN` | Shared fallback for the LinkedIn tools. A member token, not an app key — see below |
+| `LINKEDIN_CLIENT_ID` · `LINKEDIN_CLIENT_SECRET` | A LinkedIn app, so each person connects their own account |
 | `LINKEDIN_ORGANIZATION_ID` | Default Page, e.g. `1234567` — so prompts never name it |
 | `LINKEDIN_API_VERSION` | `YYYYMM`. LinkedIn retires versions on a rolling basis; override when it does |
 | `YOUTUBE_API_KEY` | Public YouTube counts and the video list |

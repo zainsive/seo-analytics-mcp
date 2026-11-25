@@ -17,6 +17,8 @@ from seo_mcp.tools import mailchimp_tools as mt
 # scanner blocks the push - correctly, since no scanner can tell a fake from the real
 # thing. Only the suffix matters to the code under test.
 KEY = "fixture-key-not-a-real-credential-us7"
+# What the client is handed now: a key plus the data centre it implies.
+ACCESS = mailchimp.Access.from_api_key(KEY)
 
 
 # --- data centre routing ---------------------------------------------------
@@ -25,7 +27,7 @@ KEY = "fixture-key-not-a-real-credential-us7"
 def test_the_base_url_comes_from_the_key_suffix():
     """A key ending -us7 must go to us7.api.mailchimp.com; the bare host 404s."""
     assert mailchimp.data_center(KEY) == "us7"
-    assert mailchimp._base(KEY) == "https://us7.api.mailchimp.com/3.0"
+    assert ACCESS.base == "https://us7.api.mailchimp.com/3.0"
 
 
 @pytest.mark.parametrize("bad", ["nosuffix", "", "abc-xx", "key-"])
@@ -115,7 +117,7 @@ async def test_audiences_are_normalised_and_rates_converted(stub):
             }
         }
     )
-    result = await mailchimp.list_audiences(KEY)
+    result = await mailchimp.list_audiences(ACCESS)
     row = result.rows[0]
     assert row["audience_id"] == "abc" and row["members"] == 1200
     assert row["created"] == "2025-02-03"
@@ -125,7 +127,7 @@ async def test_audiences_are_normalised_and_rates_converted(stub):
 
 async def test_an_empty_account_says_why_rather_than_returning_nothing(stub):
     stub({"/lists": {"total_items": 0, "lists": []}})
-    result = await mailchimp.list_audiences(KEY)
+    result = await mailchimp.list_audiences(ACCESS)
     assert result.rows == []
     assert any("different account" in n for n in result.notes)
 
@@ -146,7 +148,7 @@ async def test_campaigns_only_include_finished_sends(stub):
 
     m.httpx.AsyncClient = factory
     try:
-        result = await mailchimp.list_campaigns(KEY, since="2026-01-01", limit=10)
+        result = await mailchimp.list_campaigns(ACCESS, since="2026-01-01", limit=10)
     finally:
         m.httpx.AsyncClient = real
     assert captured["status"] == "sent"
@@ -174,7 +176,7 @@ async def test_clicked_links_carry_a_path_that_joins_to_the_other_sources(stub):
             }
         }
     )
-    result = await mailchimp.campaign_links(KEY, "camp1", site_host="stgconsulting.com")
+    result = await mailchimp.campaign_links(ACCESS, "camp1", site_host="stgconsulting.com")
     # The same normalisation Search Console pages and GA4 landing pages go through.
     assert result.rows[0]["path"] == "/services/fractional-cto"
     assert result.rows[1]["path"] == "/about-us"
@@ -197,7 +199,7 @@ async def test_a_campaign_report_recomputes_rates_from_components(stub):
             }
         }
     )
-    r = await mailchimp.campaign_report(KEY, "camp1")
+    r = await mailchimp.campaign_report(ACCESS, "camp1")
     assert r["emails_sent"] == 1000 and r["unique_opens"] == 410
     assert r["bounces"] == 5 and r["bounce_rate"] == 0.005
     assert r["unsubscribes"] == 7 and r["unsubscribe_rate"] == 0.007
@@ -206,7 +208,7 @@ async def test_a_campaign_report_recomputes_rates_from_components(stub):
 
 async def test_a_campaign_with_no_sends_does_not_divide_by_zero(stub):
     stub({"/reports/camp0": {"emails_sent": 0, "opens": {}, "clicks": {}, "bounces": {}}})
-    r = await mailchimp.campaign_report(KEY, "camp0")
+    r = await mailchimp.campaign_report(ACCESS, "camp0")
     assert r["bounce_rate"] is None and r["unsubscribe_rate"] is None
 
 
@@ -297,9 +299,9 @@ async def test_every_payload_is_labelled_mailchimp_not_a_google_source(stub):
         }
     )
     for result in (
-        await mailchimp.list_audiences(KEY),
-        await mailchimp.list_campaigns(KEY),
-        await mailchimp.campaign_links(KEY, "c1"),
+        await mailchimp.list_audiences(ACCESS),
+        await mailchimp.list_campaigns(ACCESS),
+        await mailchimp.campaign_links(ACCESS, "c1"),
     ):
         assert result.source == "mailchimp"
 
@@ -332,7 +334,7 @@ async def test_off_site_links_get_no_path_so_nothing_joins_them_to_the_site(stub
             }
         }
     )
-    result = await mailchimp.campaign_links(KEY, "camp1", site_host="stgconsulting.com")
+    result = await mailchimp.campaign_links(ACCESS, "camp1", site_host="stgconsulting.com")
     by_host = {r["host"]: r for r in result.rows}
     assert by_host["linkedin.com"]["path"] == ""
     assert by_host["facebook.com"]["path"] == ""
@@ -352,7 +354,7 @@ async def test_a_subdomain_counts_as_the_site_but_a_lookalike_does_not(stub):
             }
         }
     )
-    result = await mailchimp.campaign_links(KEY, "camp1", site_host="example.com")
+    result = await mailchimp.campaign_links(ACCESS, "camp1", site_host="example.com")
     by_host = {r["host"]: r for r in result.rows}
     assert by_host["blog.example.com"]["path"] == "/post"
     assert by_host["notexample.com"]["path"] == ""
@@ -369,7 +371,7 @@ async def test_with_no_site_configured_no_row_claims_a_joinable_path(stub):
             }
         }
     )
-    result = await mailchimp.campaign_links(KEY, "camp1")
+    result = await mailchimp.campaign_links(ACCESS, "camp1")
     assert result.rows[0]["path"] == ""
     assert any("GSC_DEFAULT_SITE" in n for n in result.notes)
 
@@ -391,7 +393,7 @@ async def test_one_url_placed_twice_is_summed_not_shown_twice_nor_dropped(stub):
             }
         }
     )
-    result = await mailchimp.campaign_links(KEY, "camp1", site_host="example.com")
+    result = await mailchimp.campaign_links(ACCESS, "camp1", site_host="example.com")
     assert len(result.rows) == 2
     offer = next(r for r in result.rows if r["path"] == "/offer")
     assert offer["clicks"] == 54 and offer["unique_clicks"] == 24

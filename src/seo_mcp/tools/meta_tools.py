@@ -89,11 +89,17 @@ async def auth_status() -> dict[str, Any]:
 
     # Mailchimp holds its own credential, independent of the Google one. Report it
     # before any Google early-return, or configuring Mailchimp first yields silence.
-    if key := profile.mailchimp_key:
+    mine = connections.recall(subject, connections.MAILCHIMP) if (subject := caller()) else None
+    if profile.mailchimp_key or mine:
+        from .mailchimp_tools import _access as mailchimp_access
+
         try:
-            account = await mailchimp.ping(key)
+            # Probed with what the Mailchimp tools themselves resolve, so this cannot
+            # report a working account while every query refuses, or the reverse.
+            account = await mailchimp.ping(mailchimp_access())
             out["mailchimp"] = {
                 "reachable": True,
+                "reading_as": "you" if mine else "the server's shared key",
                 "account_name": account.account_name,
                 "data_center": account.data_center,
                 "total_subscribers": account.total_subscribers,
@@ -101,18 +107,28 @@ async def auth_status() -> dict[str, Any]:
         except Exception as exc:
             out["mailchimp"] = {
                 "reachable": False,
+                "reading_as": "you" if mine else "the server's shared key",
                 "error": f"{type(exc).__name__}: {exc}"[:220],
             }
+        if subject and not mine and link.available():
+            out["mailchimp"]["note"] = (
+                "This is the shared key, not your own Mailchimp login. Call "
+                "connect_account with 'mailchimp' to read as yourself."
+            )
 
     # LinkedIn likewise, and reported the same way: what the token EXPOSES, not merely
     # whether it answers. A token with no admin role authenticates perfectly and can
     # read nothing, which is the failure this probe exists to name.
-    if token := profile.linkedin_token:
+    mine_li = connections.recall(subject, connections.LINKEDIN) if subject else None
+    if profile.linkedin_token or mine_li:
+        from .linkedin_tools import _token as linkedin_token
+
         version = profile.linkedin_version or linkedin.DEFAULT_VERSION
         try:
-            orgs = await linkedin.list_organizations(token, version)
+            orgs = await linkedin.list_organizations(linkedin_token(), version)
             out["linkedin"] = {
                 "reachable": True,
+                "reading_as": "you" if mine_li else "the server's shared token",
                 "api_version": version,
                 "organizations": [{"id": o.organization_id, "name": o.name} for o in orgs],
                 "administers": len(orgs),
@@ -140,7 +156,7 @@ async def auth_status() -> dict[str, Any]:
     # gives analytics but cannot list videos. Collapsing them into one yes/no would
     # leave a half-configured install looking wholly broken.
     yt_source = youtube_auth.source()
-    if (key := profile.youtube_api_key) or yt_source != "none":
+    if profile.youtube_api_key or yt_source != "none":
         state: dict[str, Any] = {}
         channel = profile.youtube_channel
         if not channel:

@@ -199,8 +199,15 @@ def shape(
     top_n: int = DEFAULT_TOP_N,
     sort_by: str | None = None,
     export_dir: Path | None = None,
+    notes: list[str] | None = None,
 ) -> ShapedResponse:
-    """Cap rows, total over the FULL set, spill the remainder to CSV."""
+    """Cap rows, total over the FULL set, spill the remainder to CSV.
+
+    `notes` are caveats about THIS request rather than about the data, so they are
+    passed in here instead of travelling on the QueryResult: a cached result is shared
+    between requests, and "you are reading through a shared credential" is true of the
+    asking, not of the rows.
+    """
     top_n = max(1, min(top_n, HARD_ROW_CAP))
     rows = list(result.rows)
     columns = list(result.dimension_keys) + list(result.metric_keys)
@@ -220,7 +227,7 @@ def shape(
     out: ShapedResponse = {
         "summary": summary,
         "rows": rows[:top_n],
-        "notes": list(result.notes),
+        "notes": list(result.notes) + list(notes or []),
     }
 
     if result.total_rows is not None and result.total_rows > len(rows):

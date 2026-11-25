@@ -99,6 +99,27 @@ class Profile:
     def linkedin_organization(self) -> str | None:
         return self.default("linkedin_organization", "LINKEDIN_ORGANIZATION_ID")
 
+    # The OAuth apps that let each person attach their own Mailchimp and LinkedIn,
+    # rather than everyone reading through the single shared credential above. These
+    # identify the server to the platform; the per-person tokens they yield are stored
+    # encrypted against each email, never here.
+
+    @property
+    def mailchimp_client_id(self) -> str | None:
+        return self.default("mailchimp_client_id", "MAILCHIMP_CLIENT_ID")
+
+    @property
+    def mailchimp_client_secret(self) -> str | None:
+        return self.default("mailchimp_client_secret", "MAILCHIMP_CLIENT_SECRET")
+
+    @property
+    def linkedin_client_id(self) -> str | None:
+        return self.default("linkedin_client_id", "LINKEDIN_CLIENT_ID")
+
+    @property
+    def linkedin_client_secret(self) -> str | None:
+        return self.default("linkedin_client_secret", "LINKEDIN_CLIENT_SECRET")
+
     @property
     def public_url(self) -> str | None:
         """This server's own public address. Google sign-in builds its redirect URI

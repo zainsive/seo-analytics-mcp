@@ -138,9 +138,7 @@ async def channel_stats(access: Any, channel: str) -> Channel:
     ident = channel_id(channel)
 
     def work():
-        return (
-            _data_service(access).channels().list(part="snippet,statistics", id=ident).execute()
-        )
+        return _data_service(access).channels().list(part="snippet,statistics", id=ident).execute()
 
     try:
         payload = await asyncio.to_thread(work)

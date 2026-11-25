@@ -168,3 +168,51 @@ def test_the_youtube_client_never_refreshes_a_credential_itself():
     source = (SRC / "clients" / "youtube.py").read_text()
     assert "oauth2.googleapis.com" not in source
     assert ".refresh(" not in source
+
+
+# --- the one module that is allowed to POST -----------------------------------
+
+AUTH_HOSTS = {
+    "login.mailchimp.com",  # Mailchimp OAuth: authorize, token, metadata
+    "www.linkedin.com",  # LinkedIn OAuth: authorization, accessToken
+}
+
+
+def test_the_link_module_only_ever_talks_to_an_auth_endpoint():
+    """platforms.py is deliberately outside the read-only verb check, because
+    exchanging an authorization code is a POST and always will be.
+
+    That makes it the one place where a writing request to a platform's data API
+    would pass unnoticed, so the hosts it may reach are pinned instead. Adding a
+    POST to api.mailchimp.com here would otherwise be the way around every other
+    guarantee in this file.
+    """
+    from urllib.parse import urlsplit
+
+    source = (SRC / "sso" / "platforms.py").read_text()
+    urls = [
+        node.value
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.startswith("http")
+    ]
+    assert urls, "no endpoints found - has the module moved?"
+    for url in urls:
+        assert urlsplit(url).hostname in AUTH_HOSTS, f"{url} is not an auth endpoint"
+
+
+def test_the_link_module_posts_only_to_its_token_endpoint():
+    """A POST anywhere else in here is either a data call or a mistake."""
+    source = (SRC / "sso" / "platforms.py").read_text()
+    for call in [
+        n
+        for n in ast.walk(ast.parse(source))
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr in WRITING_VERBS
+    ]:
+        target = call.args[0] if call.args else None
+        assert isinstance(target, ast.Attribute) and target.attr == "TOKEN", (
+            f"a {call.func.attr} in platforms.py does not go to the token endpoint"
+        )

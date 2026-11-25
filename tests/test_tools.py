@@ -80,6 +80,7 @@ async def test_the_whole_tool_roster_is_registered():
     is pinned here rather than counted."""
     names = {t.name for t in await mcp.list_tools()}
     assert names == {
+        "connect_account",
         "youtube_channel_stats",
         "youtube_recent_videos",
         "youtube_channel_report",

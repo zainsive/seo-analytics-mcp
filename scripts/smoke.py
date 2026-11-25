@@ -21,7 +21,7 @@ import tempfile
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-EXPECTED_TOOLS = 25
+EXPECTED_TOOLS = 26
 
 
 async def main(binary: str) -> int:
